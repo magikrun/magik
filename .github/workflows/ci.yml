@@ -104,21 +104,31 @@ jobs:
             "https://github.com/containers/libkrunfw/releases/download/${LIBKRUNFW_TAG}/libkrunfw-x86_64.tgz"
           mkdir -p /tmp/libkrunfw-extract
           tar xf /tmp/libkrunfw-x86_64.tgz -C /tmp/libkrunfw-extract
-          sudo mv /tmp/libkrunfw-extract/lib64/* /usr/local/lib/
-          sudo ldconfig
+          # libkrunfw installs to lib64/ on Linux
+          sudo mkdir -p /usr/local/lib64
+          sudo cp -a /tmp/libkrunfw-extract/lib64/* /usr/local/lib64/
+          # Also symlink to lib/ for compatibility
+          sudo mkdir -p /usr/local/lib
+          for f in /usr/local/lib64/libkrunfw*; do
+            sudo ln -sf "$f" /usr/local/lib/$(basename "$f")
+          done
+          sudo ldconfig /usr/local/lib64 /usr/local/lib
 
       - name: Cache libkrun build
         id: cache-libkrun
         uses: actions/cache@v4
         with:
-          path: /usr/local
-          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v2
+          path: |
+            /usr/local/lib64/libkrun*
+            /usr/local/lib64/pkgconfig/libkrun.pc
+            /usr/local/include/libkrun.h
+          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v3
 
       - name: Build libkrun
         if: steps.cache-libkrun.outputs.cache-hit != 'true'
         run: |
           # Install additional build dependencies for libkrun
-          sudo apt-get install -y patchelf libc6-dev
+          sudo apt-get install -y patchelf
           
           git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
             https://github.com/containers/libkrun.git /tmp/libkrun
@@ -127,21 +137,40 @@ jobs:
           # Create fake init binary (not needed for library build)
           mkdir -p init && touch init/init
           
-          # Build libkrun (allow warnings - libkrun code uses older Rust patterns)
-          RUSTFLAGS="-A warnings" make
-          sudo make install
+          # Build libkrun with PREFIX=/usr/local
+          # (libkrun installs to lib64/ on Linux)
+          RUSTFLAGS="-A warnings" make PREFIX=/usr/local
+          sudo make PREFIX=/usr/local install
           
           # Update library cache
+          sudo ldconfig /usr/local/lib64
+
+      - name: Setup library paths for libkrun
+        run: |
+          # Symlink lib64 libs to lib for tools that expect lib/
+          sudo mkdir -p /usr/local/lib/pkgconfig
+          for f in /usr/local/lib64/libkrun*; do
+            [ -f "$f" ] && sudo ln -sf "$f" /usr/local/lib/$(basename "$f")
+          done
+          # Also symlink pkgconfig
+          [ -f /usr/local/lib64/pkgconfig/libkrun.pc ] && \
+            sudo ln -sf /usr/local/lib64/pkgconfig/libkrun.pc /usr/local/lib/pkgconfig/
           sudo ldconfig
 
-      - name: Verify libcrun installation
+      - name: Verify library installation
         run: |
-          ls -la /usr/local/lib/
-          ls -la /usr/local/lib/pkgconfig/
+          echo "=== Checking /usr/local/lib64 ==="
+          ls -la /usr/local/lib64/ || true
+          ls -la /usr/local/lib64/pkgconfig/ || true
+          echo "=== Checking /usr/local/lib ==="
+          ls -la /usr/local/lib/ || true
+          ls -la /usr/local/lib/pkgconfig/ || true
+          echo "=== pkg-config checks ==="
           pkg-config --modversion libcrun
           pkg-config --modversion libkrun
+          pkg-config --libs libkrun
         env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
 
       - name: Check formatting
         run: cargo fmt --check
@@ -149,23 +178,23 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
         env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
 
       - name: Build
         run: cargo build --workspace
         env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
 
       - name: Run tests
         run: cargo test --workspace
         env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
 
       - name: Build release
         run: cargo build --release --workspace
         env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
