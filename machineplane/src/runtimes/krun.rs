@@ -124,6 +124,7 @@ struct VmState {
     /// Process ID of the VM (if running)
     pid: Option<u32>,
     /// Current status
+    #[allow(dead_code)]
     status: PodStatus,
     /// Labels/metadata
     labels: HashMap<String, String>,
@@ -190,16 +191,16 @@ impl KrunEngine {
     /// Ensures the rootfs and VM state directories exist.
     fn ensure_directories(&self) -> RuntimeResult<()> {
         std::fs::create_dir_all(rootfs_base_dir()).map_err(|e| {
-            RuntimeError::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to create rootfs directory: {}", e),
-            ))
+            RuntimeError::IoError(std::io::Error::other(format!(
+                "Failed to create rootfs directory: {}",
+                e
+            )))
         })?;
         std::fs::create_dir_all(vm_state_dir()).map_err(|e| {
-            RuntimeError::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to create VM state directory: {}", e),
-            ))
+            RuntimeError::IoError(std::io::Error::other(format!(
+                "Failed to create VM state directory: {}",
+                e
+            )))
         })?;
         Ok(())
     }
@@ -271,14 +272,14 @@ impl KrunEngine {
             .and_then(|r| r.get("limits"))
             .and_then(|l| l.get("memory"))
             .and_then(|m| m.as_str())
-            .and_then(|s| Self::parse_memory_string(s))
+            .and_then(Self::parse_memory_string)
             .unwrap_or(DEFAULT_MEMORY_MIB);
 
         let vcpus = resources
             .and_then(|r| r.get("limits"))
             .and_then(|l| l.get("cpu"))
             .and_then(|c| c.as_str())
-            .and_then(|s| Self::parse_cpu_string(s))
+            .and_then(Self::parse_cpu_string)
             .unwrap_or(DEFAULT_VCPUS);
 
         Ok(ContainerSpec {
@@ -294,14 +295,14 @@ impl KrunEngine {
     /// Parses a Kubernetes memory string (e.g., "512Mi", "1Gi") to MiB.
     fn parse_memory_string(s: &str) -> Option<u32> {
         let s = s.trim();
-        if s.ends_with("Gi") {
-            s[..s.len() - 2].parse::<u32>().ok().map(|v| v * 1024)
-        } else if s.ends_with("Mi") {
-            s[..s.len() - 2].parse::<u32>().ok()
-        } else if s.ends_with('G') {
-            s[..s.len() - 1].parse::<u32>().ok().map(|v| v * 1024)
-        } else if s.ends_with('M') {
-            s[..s.len() - 1].parse::<u32>().ok()
+        if let Some(v) = s.strip_suffix("Gi") {
+            v.parse::<u32>().ok().map(|n| n * 1024)
+        } else if let Some(v) = s.strip_suffix("Mi") {
+            v.parse::<u32>().ok()
+        } else if let Some(v) = s.strip_suffix('G') {
+            v.parse::<u32>().ok().map(|n| n * 1024)
+        } else if let Some(v) = s.strip_suffix('M') {
+            v.parse::<u32>().ok()
         } else {
             // Assume bytes, convert to MiB
             s.parse::<u64>().ok().map(|v| (v / 1024 / 1024) as u32)
@@ -311,12 +312,9 @@ impl KrunEngine {
     /// Parses a Kubernetes CPU string (e.g., "1", "500m") to vCPU count.
     fn parse_cpu_string(s: &str) -> Option<u32> {
         let s = s.trim();
-        if s.ends_with('m') {
+        if let Some(v) = s.strip_suffix('m') {
             // Millicores - round up to nearest vCPU
-            s[..s.len() - 1]
-                .parse::<u32>()
-                .ok()
-                .map(|m| (m + 999) / 1000)
+            v.parse::<u32>().ok().map(|m| m.div_ceil(1000))
         } else {
             s.parse::<u32>().ok()
         }
@@ -600,7 +598,7 @@ impl KrunEngine {
     fn start_vm(
         &self,
         vm_id: &str,
-        rootfs_path: &PathBuf,
+        rootfs_path: &std::path::Path,
         spec: &ContainerSpec,
         config: &DeploymentConfig,
         name: &str,
@@ -960,11 +958,11 @@ impl RuntimeEngine for KrunEngine {
             vm.ok_or_else(|| RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id)))?;
 
         // Stop the VM if running
-        if let Some(pid) = vm.pid {
-            if self.is_vm_running(pid) {
-                info!("Stopping microVM {} (PID {})", pod_id, pid);
-                self.stop_vm(pid)?;
-            }
+        if let Some(pid) = vm.pid
+            && self.is_vm_running(pid)
+        {
+            info!("Stopping microVM {} (PID {})", pod_id, pid);
+            self.stop_vm(pid)?;
         }
 
         // Cleanup rootfs

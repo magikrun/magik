@@ -23,7 +23,7 @@ mod apply_common;
 #[path = "kube_helpers.rs"]
 mod kube_helpers;
 
-use apply_common::shutdown_nodes;
+use apply_common::runtime_helpers::shutdown_nodes;
 
 use apply_common::{
     TEST_PORTS, check_instance_deployment, get_node_identities, setup_test_environment,

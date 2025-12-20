@@ -11,7 +11,6 @@ use tokio::time::{Instant, sleep};
 
 #[path = "runtime_helpers.rs"]
 pub mod runtime_helpers;
-pub use runtime_helpers::shutdown_nodes;
 use runtime_helpers::{make_test_daemon, start_nodes, wait_for_local_multiaddr};
 use tokio::task::JoinHandle;
 
