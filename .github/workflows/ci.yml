@@ -2,33 +2,27 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, master]
   pull_request:
-    branches: [ "main" ]
+    branches: [main, master]
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  LIBKRUN_VERSION: "1.16.0"
-  LIBKRUNFW_VERSION: "4.10.0"
   LIBCRUN_VERSION: "1.19.1"
 
 jobs:
-  # Linux: Full build and test with libkrun + libcrun
-  # Includes formatting and clippy checks
-  # Uses ubuntu-24.04 which has better KVM support for integration tests
+  # Linux: Full build and test with libcrun
   linux:
-    name: Linux (with libkrun + libcrun)
-    runs-on: ubuntu-24.04
+    name: Linux (with libcrun)
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
             pkgconf \
             autoconf \
             automake \
@@ -37,8 +31,6 @@ jobs:
             gcc \
             git \
             python3 \
-            patchelf \
-            musl-tools \
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
@@ -49,50 +41,9 @@ jobs:
       - name: Set up Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: x86_64-unknown-linux-musl
           components: rustfmt, clippy
 
-      # === libkrunfw (bundled kernel for libkrun) ===
-      - name: Cache libkrunfw
-        id: cache-libkrunfw
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/lib/libkrunfw*
-          key: libkrunfw-ubuntu-${{ env.LIBKRUNFW_VERSION }}-v1
-
-      - name: Install libkrunfw
-        if: steps.cache-libkrunfw.outputs.cache-hit != 'true'
-        run: |
-          # Download pre-built libkrunfw from GitHub releases
-          curl -L -o libkrunfw.tar.gz \
-            "https://github.com/containers/libkrunfw/releases/download/v${{ env.LIBKRUNFW_VERSION }}/libkrunfw-${{ env.LIBKRUNFW_VERSION }}-x86_64.tar.gz"
-          sudo tar -xzf libkrunfw.tar.gz -C /usr/local/lib --strip-components=1
-          sudo ldconfig
-
-      # === libkrun (microVM library) ===
-      - name: Cache libkrun
-        id: cache-libkrun
-        uses: actions/cache@v4
-        with:
-          path: |
-            /usr/local/lib/libkrun*
-            /usr/local/include/libkrun.h
-            /usr/local/lib/pkgconfig/libkrun.pc
-          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v2
-
-      - name: Build libkrun
-        if: steps.cache-libkrun.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
-            https://github.com/containers/libkrun.git /tmp/libkrun
-          cd /tmp/libkrun
-          
-          make
-          sudo make install
-          sudo ldconfig
-
-      # === libcrun (OCI container runtime) ===
-      - name: Cache libcrun
+      - name: Cache libcrun build
         id: cache-libcrun
         uses: actions/cache@v4
         with:
@@ -116,7 +67,7 @@ jobs:
           
           # Manually create pkgconfig file (crun doesn't provide one)
           sudo mkdir -p /usr/local/lib/pkgconfig
-          sudo tee /usr/local/lib/pkgconfig/libcrun.pc << 'EOF'
+          sudo tee /usr/local/lib/pkgconfig/libcrun.pc << 'PKGEOF'
           prefix=/usr/local
           exec_prefix=${prefix}
           libdir=${exec_prefix}/lib
@@ -127,7 +78,7 @@ jobs:
           Version: ${{ env.LIBCRUN_VERSION }}
           Libs: -L${libdir} -lcrun -lyajl -lseccomp -lcap
           Cflags: -I${includedir}
-          EOF
+          PKGEOF
           
           # Install headers
           sudo mkdir -p /usr/local/include/libcrun
@@ -137,15 +88,11 @@ jobs:
           # Copy ocispec headers (generated during build)
           find libocispec -name "*.h" -exec sudo cp {} /usr/local/include/ocispec/ \;
 
-      - name: Verify library installations
+      - name: Verify libcrun installation
         run: |
-          echo "=== libkrun ==="
-          ls -la /usr/local/lib/libkrun* || true
-          echo "=== libkrunfw ==="
-          ls -la /usr/local/lib/libkrunfw* || true
-          echo "=== libcrun ==="
-          ls -la /usr/local/lib/libcrun* || true
-          pkg-config --modversion libcrun || true
+          ls -la /usr/local/lib/
+          ls -la /usr/local/lib/pkgconfig/
+          pkg-config --modversion libcrun
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
@@ -157,56 +104,21 @@ jobs:
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
-          LIBRARY_PATH: /usr/local/lib
 
-      - name: Build workplane for musl (for embedding)
-        env:
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
-        run: cargo build -p workplane --release --target x86_64-unknown-linux-musl
-
-      - name: Rebuild machineplane to embed workplane binary
-        run: |
-          # Force rebuild of machineplane to pick up the embedded workplane binary
-          cargo build -p machineplane --release
-          cargo build -p machineplane --all-targets
+      - name: Build
+        run: cargo build --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
-          LIBRARY_PATH: /usr/local/lib
-
-      - name: Build workspace
-        run: cargo build --workspace --all-targets
-        env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib
-          LIBRARY_PATH: /usr/local/lib
-
-      - name: Check KVM access for integration tests
-        id: kvm-check
-        run: |
-          if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
-            echo "KVM is available for full VM integration tests"
-            echo "kvm_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "KVM not available - VM tests will be skipped"
-            echo "kvm_available=false" >> $GITHUB_OUTPUT
-          fi
-          ls -la /dev/kvm 2>/dev/null || echo "/dev/kvm not found"
 
       - name: Run tests
         run: cargo test --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
-          MAGIK_SELECTION_WINDOW_MS: "1000"
-          MAGIK_GOSSIP_SETTLE_MS: "5000"
-          MAGIK_APPLY_MESH_TIMEOUT_SECS: "60"
-          # Enable full VM tests only if KVM is available
-          MAGIK_FORCE_VM_TESTS: ${{ steps.kvm-check.outputs.kvm_available == 'true' && '1' || '' }}
 
       - name: Build release
         run: cargo build --release --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
-          LIBRARY_PATH: /usr/local/lib
