@@ -10,7 +10,8 @@ use std::time::Duration;
 use tokio::time::{Instant, sleep};
 
 #[path = "runtime_helpers.rs"]
-mod runtime_helpers;
+pub mod runtime_helpers;
+pub use runtime_helpers::shutdown_nodes;
 use runtime_helpers::{make_test_daemon, start_nodes, wait_for_local_multiaddr};
 use tokio::task::JoinHandle;
 
@@ -96,21 +97,15 @@ pub async fn get_node_identities(
         let client = client.clone();
         async move {
             let base = format!("http://127.0.0.1:{}", port);
-            match client
+            if let Ok(resp) = client
                 .get(format!("{}/debug/local_identity", base))
                 .send()
                 .await
+                && let Ok(json) = resp.json::<serde_json::Value>().await
+                && json.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                && let Some(identity) = json.get("local_identity").and_then(|v| v.as_str())
             {
-                Ok(resp) => match resp.json::<serde_json::Value>().await {
-                    Ok(json) if json.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                        if let Some(identity) = json.get("local_identity").and_then(|v| v.as_str())
-                        {
-                            return (port, Some(identity.to_string()));
-                        }
-                    }
-                    _ => {}
-                },
-                Err(_) => {}
+                return (port, Some(identity.to_string()));
             }
             (port, None)
         }
@@ -138,12 +133,11 @@ pub async fn wait_for_mesh_formation(
         let mut total_peers = 0usize;
         for &port in ports {
             let base = format!("http://127.0.0.1:{}", port);
-            if let Ok(resp) = client.get(format!("{}/debug/peers", base)).send().await {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(peers_array) = json.get("peers").and_then(|v| v.as_array()) {
-                        total_peers += peers_array.len();
-                    }
-                }
+            if let Ok(resp) = client.get(format!("{}/debug/peers", base)).send().await
+                && let Ok(json) = resp.json::<serde_json::Value>().await
+                && let Some(peers_array) = json.get("peers").and_then(|v| v.as_array())
+            {
+                total_peers += peers_array.len();
             }
         }
 
@@ -171,7 +165,7 @@ pub async fn wait_for_mesh_formation(
 }
 
 /// Inspect node debug endpoints to determine pod placement.
-
+#[allow(clippy::too_many_arguments)]
 pub async fn check_instance_deployment(
     client: &reqwest::Client,
     ports: &[u16],
@@ -200,8 +194,9 @@ pub async fn check_instance_deployment(
                     .send()
                     .await;
 
-                if let Ok(resp) = pods_resp {
-                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Ok(resp) = pods_resp
+                    && let Ok(json) = resp.json::<serde_json::Value>().await
+                {
                         log::info!(
                             "/debug/pods response on port {}: {}",
                             port,
@@ -298,15 +293,13 @@ pub async fn check_instance_deployment(
                                     // Fallback: check for any running pod
                                     if let Some(status) =
                                         pod_info.get("status").and_then(|v| v.as_str())
+                                        && status == "Running"
                                     {
-                                        if status == "Running" {
-                                            return (port, true, true);
-                                        }
+                                        return (port, true, true);
                                     }
                                 }
                             }
                         }
-                    }
                 }
 
                 (port, false, false)

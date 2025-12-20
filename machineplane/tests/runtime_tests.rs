@@ -50,7 +50,7 @@ async fn registry_get_engine_by_name() {
     let engines = registry.list_engines();
 
     for engine_name in engines {
-        let engine = registry.get_engine(&engine_name);
+        let engine = registry.get_engine(engine_name);
         assert!(
             engine.is_some(),
             "Registry should return engine for name: {}",
@@ -132,11 +132,11 @@ async fn engine_availability_check() {
     let registry = create_default_registry().await;
 
     for engine_name in registry.list_engines() {
-        if let Some(engine) = registry.get_engine(&engine_name) {
+        if let Some(engine) = registry.get_engine(engine_name) {
             let available = engine.is_available().await;
             log::info!("Engine '{}' availability: {}", engine_name, available);
-            // Just verify it returns a bool without panicking
-            assert!(available || !available);
+            // Verify it returns a bool - the variable itself proves the type
+            let _: bool = available;
         }
     }
 }

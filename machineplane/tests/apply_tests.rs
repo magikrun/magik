@@ -16,21 +16,20 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use machineplane::runtimes::{PodStatus, RuntimeEngine, create_default_registry};
+use machineplane::runtimes::{PodStatus, create_default_registry};
 
 #[path = "apply_common.rs"]
 mod apply_common;
 #[path = "kube_helpers.rs"]
 mod kube_helpers;
-#[path = "runtime_helpers.rs"]
-mod runtime_helpers;
+
+use apply_common::shutdown_nodes;
 
 use apply_common::{
     TEST_PORTS, check_instance_deployment, get_node_identities, setup_test_environment,
     start_fabric_nodes, wait_for_mesh_formation,
 };
 use kube_helpers::{apply_manifest_via_kube_api, delete_manifest_via_kube_api};
-use runtime_helpers::shutdown_nodes;
 
 /// Name label key for workload identification
 const NAME_LABEL_KEY: &str = "magik.name";

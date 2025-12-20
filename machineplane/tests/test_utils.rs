@@ -199,16 +199,16 @@ async fn log_local_address(
     match request.send().await {
         Ok(resp) => match resp.json::<Value>().await {
             Ok(Value::Object(map)) => {
-                if map.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                    if let Some(identity) = map.get("local_identity").and_then(|v| v.as_str()) {
-                        let node_address = format!("{}:{}/{}", display_host, korium_port, identity);
-                        log::info!(
-                            "machineplane node at {} reports identity {}",
-                            base,
-                            node_address
-                        );
-                        return;
-                    }
+                if map.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                    && let Some(identity) = map.get("local_identity").and_then(|v| v.as_str())
+                {
+                    let node_address = format!("{}:{}/{}", display_host, korium_port, identity);
+                    log::info!(
+                        "machineplane node at {} reports identity {}",
+                        base,
+                        node_address
+                    );
+                    return;
                 }
                 log::warn!("machineplane node at {} did not return an identity", base);
             }
@@ -305,21 +305,15 @@ pub async fn get_node_identities(client: &Client, ports: &[u16]) -> StdHashMap<u
         let client = client.clone();
         async move {
             let base = format!("http://127.0.0.1:{}", port);
-            match client
+            if let Ok(resp) = client
                 .get(format!("{}/debug/local_identity", base))
                 .send()
                 .await
+                && let Ok(json) = resp.json::<Value>().await
+                && json.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                && let Some(identity) = json.get("local_identity").and_then(|v| v.as_str())
             {
-                Ok(resp) => match resp.json::<Value>().await {
-                    Ok(json) if json.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                        if let Some(identity) = json.get("local_identity").and_then(|v| v.as_str())
-                        {
-                            return (port, Some(identity.to_string()));
-                        }
-                    }
-                    _ => {}
-                },
-                Err(_) => {}
+                return (port, Some(identity.to_string()));
             }
             (port, None)
         }
@@ -347,12 +341,11 @@ pub async fn wait_for_mesh_formation(
         let mut total_peers = 0usize;
         for &port in ports {
             let base = format!("http://127.0.0.1:{}", port);
-            if let Ok(resp) = client.get(format!("{}/debug/peers", base)).send().await {
-                if let Ok(json) = resp.json::<Value>().await {
-                    if let Some(peers_array) = json.get("peers").and_then(|v| v.as_array()) {
-                        total_peers += peers_array.len();
-                    }
-                }
+            if let Ok(resp) = client.get(format!("{}/debug/peers", base)).send().await
+                && let Ok(json) = resp.json::<Value>().await
+                && let Some(peers_array) = json.get("peers").and_then(|v| v.as_array())
+            {
+                total_peers += peers_array.len();
             }
         }
 
@@ -532,6 +525,7 @@ pub async fn delete_manifest_via_kube_api(
 // ============================================================================
 
 /// Inspect node debug endpoints to determine pod placement.
+#[allow(clippy::too_many_arguments)]
 pub async fn check_instance_deployment(
     client: &Client,
     ports: &[u16],
@@ -558,9 +552,10 @@ pub async fn check_instance_deployment(
                         .send()
                         .await;
 
-                    if let Ok(resp) = peer_resp {
-                        if let Ok(json) = resp.json::<Value>().await {
-                            log::info!(
+                    if let Ok(resp) = peer_resp
+                        && let Ok(json) = resp.json::<Value>().await
+                    {
+                        log::info!(
                                 "Peer-specific endpoint response for identity {} on port {}: {}",
                                 identity,
                                 port,
@@ -658,15 +653,13 @@ pub async fn check_instance_deployment(
                                         // Fallback: check for any running pod
                                         if let Some(status) =
                                             pod_info.get("status").and_then(|v| v.as_str())
+                                            && status == "Running"
                                         {
-                                            if status == "Running" {
-                                                return (port, true, true);
-                                            }
+                                            return (port, true, true);
                                         }
                                     }
                                 }
                             }
-                        }
                     }
                 }
 

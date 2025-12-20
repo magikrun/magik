@@ -132,18 +132,17 @@ async fn log_local_address(
     match request.send().await {
         Ok(resp) => match resp.json::<Value>().await {
             Ok(Value::Object(map)) => {
-                if map.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                    if let Some(identity) = map.get("local_identity").and_then(|v| v.as_str()) {
-                        // Korium bootstrap format: <identity>@<ip:port>
-                        let korium_address =
-                            format!("{}@{}:{}", identity, display_host, korium_port);
-                        log::info!(
-                            "machineplane node at {} reports Korium address {}",
-                            base,
-                            korium_address
-                        );
-                        return;
-                    }
+                if map.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                    && let Some(identity) = map.get("local_identity").and_then(|v| v.as_str())
+                {
+                    // Korium bootstrap format: <identity>@<ip:port>
+                    let korium_address = format!("{}@{}:{}", identity, display_host, korium_port);
+                    log::info!(
+                        "machineplane node at {} reports Korium address {}",
+                        base,
+                        korium_address
+                    );
+                    return;
                 }
                 log::warn!("machineplane node at {} did not return an identity", base);
             }

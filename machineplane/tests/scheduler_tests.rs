@@ -116,7 +116,7 @@ fn resource_fit_score_is_bounded() {
     let computed_score = capacity_score * 0.8 + 0.2;
 
     assert!(
-        computed_score >= 0.0 && computed_score <= 1.0,
+        (0.0..=1.0).contains(&computed_score),
         "Computed score MUST be in range [0.0, 1.0]"
     );
 
@@ -439,10 +439,10 @@ fn record_replay(
     seen.retain(|_, ts| now.saturating_sub(*ts) <= REPLAY_WINDOW_MS);
 
     // Check if already seen
-    if let Some(ts) = seen.get(&key) {
-        if now.saturating_sub(*ts) <= REPLAY_WINDOW_MS {
-            return false; // Replay detected
-        }
+    if let Some(ts) = seen.get(&key)
+        && now.saturating_sub(*ts) <= REPLAY_WINDOW_MS
+    {
+        return false; // Replay detected
     }
 
     seen.insert(key, now);
@@ -531,13 +531,14 @@ fn selection_window_is_reasonable() {
     use machineplane::scheduler::DEFAULT_SELECTION_WINDOW_MS;
 
     // Selection window should be between 100ms and 1000ms for responsive scheduling
+    // Use const assertion via debug_assert for compile-time check
+    const _: () = assert!(DEFAULT_SELECTION_WINDOW_MS >= 100);
+    const _: () = assert!(DEFAULT_SELECTION_WINDOW_MS <= 1000);
+
+    // Runtime check for test visibility
     assert!(
-        DEFAULT_SELECTION_WINDOW_MS >= 100,
-        "Selection window MUST be at least 100ms for network propagation"
-    );
-    assert!(
-        DEFAULT_SELECTION_WINDOW_MS <= 1000,
-        "Selection window SHOULD be at most 1000ms for responsiveness"
+        (100..=1000).contains(&DEFAULT_SELECTION_WINDOW_MS),
+        "Selection window MUST be in range [100ms, 1000ms]"
     );
 }
 

@@ -572,11 +572,11 @@ fn stateful_detects_duplicate_ordinals() {
     let mut deduped = Vec::new();
 
     for record in records {
-        if let Some(ord) = record.ordinal {
-            if !seen.insert(ord) {
-                duplicates.push(record);
-                continue;
-            }
+        if let Some(ord) = record.ordinal
+            && !seen.insert(ord)
+        {
+            duplicates.push(record);
+            continue;
         }
         deduped.push(record);
     }
@@ -596,17 +596,13 @@ fn stateful_detects_duplicate_ordinals() {
 /// Verifies removal order: duplicates > unhealthy > excess healthy.
 #[test]
 fn removal_priority_order() {
-    // Build removal candidates list in priority order
-    let mut removal_candidates: Vec<(&str, &str)> = Vec::new();
-
-    // 1. Duplicates first
-    removal_candidates.push(("duplicate", "peer-dup"));
-
-    // 2. Unhealthy second
-    removal_candidates.push(("unhealthy", "peer-unhealthy"));
-
-    // 3. Excess healthy last
-    removal_candidates.push(("excess", "peer-excess"));
+    // Build removal candidates list in priority order:
+    // 1. Duplicates first, 2. Unhealthy second, 3. Excess healthy last
+    let removal_candidates: Vec<(&str, &str)> = vec![
+        ("duplicate", "peer-dup"),
+        ("unhealthy", "peer-unhealthy"),
+        ("excess", "peer-excess"),
+    ];
 
     assert_eq!(removal_candidates[0].0, "duplicate");
     assert_eq!(removal_candidates[1].0, "unhealthy");
