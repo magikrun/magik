@@ -6,6 +6,8 @@ description = "Magik machineplane daemon"
 build = "build.rs"
 
 [features]
+# Default features enable libkrun on supported platforms (macOS/Linux)
+default = ["runtime-krun"]
 # Automatically enabled by build.rs when workplane binary is available
 embedded-workplane = []
 # libkrun microVM support (requires libkrun system library)
