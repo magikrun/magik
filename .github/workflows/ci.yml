@@ -104,15 +104,9 @@ jobs:
             "https://github.com/containers/libkrunfw/releases/download/${LIBKRUNFW_TAG}/libkrunfw-x86_64.tgz"
           mkdir -p /tmp/libkrunfw-extract
           tar xf /tmp/libkrunfw-x86_64.tgz -C /tmp/libkrunfw-extract
-          # libkrunfw installs to lib64/ on Linux
-          sudo mkdir -p /usr/local/lib64
-          sudo cp -a /tmp/libkrunfw-extract/lib64/* /usr/local/lib64/
-          # Also symlink to lib/ for compatibility
-          sudo mkdir -p /usr/local/lib
-          for f in /usr/local/lib64/libkrunfw*; do
-            sudo ln -sf "$f" /usr/local/lib/$(basename "$f")
-          done
-          sudo ldconfig /usr/local/lib64 /usr/local/lib
+          # Install to system library path (same as libkrun's CI does)
+          sudo mv /tmp/libkrunfw-extract/lib64/* /lib/x86_64-linux-gnu/
+          sudo ldconfig
 
       - name: Cache libkrun build
         id: cache-libkrun
@@ -122,7 +116,7 @@ jobs:
             /usr/local/lib64/libkrun*
             /usr/local/lib64/pkgconfig/libkrun.pc
             /usr/local/include/libkrun.h
-          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v3
+          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v4
 
       - name: Build libkrun
         if: steps.cache-libkrun.outputs.cache-hit != 'true'
@@ -138,12 +132,12 @@ jobs:
           mkdir -p init && touch init/init
           
           # Build libkrun with PREFIX=/usr/local
-          # (libkrun installs to lib64/ on Linux)
+          # libkrunfw must be findable by the linker (installed to /lib/x86_64-linux-gnu)
           RUSTFLAGS="-A warnings" make PREFIX=/usr/local
           sudo make PREFIX=/usr/local install
           
           # Update library cache
-          sudo ldconfig /usr/local/lib64
+          sudo ldconfig
 
       - name: Setup library paths for libkrun
         run: |
@@ -155,6 +149,8 @@ jobs:
           # Also symlink pkgconfig
           [ -f /usr/local/lib64/pkgconfig/libkrun.pc ] && \
             sudo ln -sf /usr/local/lib64/pkgconfig/libkrun.pc /usr/local/lib/pkgconfig/
+          # Add lib64 to ldconfig
+          echo "/usr/local/lib64" | sudo tee /etc/ld.so.conf.d/local-lib64.conf
           sudo ldconfig
 
       - name: Verify library installation
