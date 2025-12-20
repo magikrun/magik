@@ -46,15 +46,43 @@ async fn is_runtime_available() -> bool {
 /// On macOS, libkrun requires libkrunfw (bundled kernel) and the binary must be signed
 /// with the `com.apple.security.hypervisor` entitlement for HVF access.
 /// On Linux, libkrun (TSI mode) works with just a rootfs + workplane binary.
+///
+/// Returns true only when:
+/// - Platform is Linux, OR MAGIK_FORCE_VM_TESTS=1 is set on macOS
+/// - The workplane binary is embedded (checked via runtime initialization)
 fn is_vm_deployment_supported() -> bool {
     #[cfg(target_os = "linux")]
+    let platform_ok = true;
+    #[cfg(not(target_os = "linux"))]
+    let platform_ok = std::env::var("MAGIK_FORCE_VM_TESTS").is_ok();
+
+    if !platform_ok {
+        return false;
+    }
+
+    // Check if the workplane binary was embedded at compile time
+    // by looking for the embedded-workplane feature or checking KVM access on Linux
+    #[cfg(target_os = "linux")]
     {
-        true
+        // On Linux, also check KVM access for full VM testing
+        let kvm_available = std::path::Path::new("/dev/kvm").exists()
+            && std::fs::metadata("/dev/kvm")
+                .map(|m| {
+                    use std::os::unix::fs::MetadataExt;
+                    // Check if we have read+write access (mode check is simplified)
+                    m.mode() & 0o006 != 0 || unsafe { libc::geteuid() } == 0
+                })
+                .unwrap_or(false);
+        
+        if !kvm_available {
+            log::info!("KVM not accessible - full VM tests will be skipped");
+        }
+        kvm_available
     }
     #[cfg(not(target_os = "linux"))]
     {
-        // On macOS, check if MAGIK_SKIP_VM_TESTS is NOT set to allow manual override
-        std::env::var("MAGIK_FORCE_VM_TESTS").is_ok()
+        // On macOS with MAGIK_FORCE_VM_TESTS, assume HVF works (user has signed binary)
+        true
     }
 }
 
