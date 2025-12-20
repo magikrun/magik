@@ -121,10 +121,6 @@ const MAX_ROOTFS_SIZE: u64 = 4 * 1024 * 1024 * 1024;
 /// Directory for storing container bundles.
 const BUNDLE_BASE_DIR: &str = "/var/lib/magik/bundles";
 
-/// Directory for storing container state (reserved for future use).
-#[allow(dead_code)]
-const STATE_DIR: &str = "/var/run/magik/crun";
-
 /// Label keys for metadata.
 const POD_ID_LABEL_KEY: &str = "magik.io/pod-id";
 const NAMESPACE_LABEL_KEY: &str = "magik.io/namespace";
@@ -870,7 +866,11 @@ impl CrunEngine {
 
     /// Runs a container using libcrun FFI (Linux only).
     #[cfg(target_os = "linux")]
-    fn run_container_ffi(&self, container_id: &str, bundle_path: &PathBuf) -> RuntimeResult<u32> {
+    fn run_container_ffi(
+        &self,
+        container_id: &str,
+        bundle_path: &std::path::Path,
+    ) -> RuntimeResult<u32> {
         std::fs::create_dir_all(STATE_DIR).map_err(RuntimeError::IoError)?;
 
         info!("Starting container {} via libcrun FFI", container_id);
