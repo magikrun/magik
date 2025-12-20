@@ -28,7 +28,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or(std::time::Duration::ZERO)
         .as_millis() as u64
 }
 

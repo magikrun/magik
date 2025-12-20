@@ -909,10 +909,12 @@ fn get_local_manifest(tender_id: &str) -> Option<String> {
 }
 
 /// Returns current time as milliseconds since Unix epoch.
+///
+/// Returns 0 if system clock is before Unix epoch (misconfigured clock).
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or(Duration::ZERO)
         .as_millis() as u64
 }
 
