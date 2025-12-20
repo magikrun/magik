@@ -143,10 +143,10 @@ static DISPOSAL_SET: LazyLock<tokio::sync::RwLock<HashMap<String, std::time::Ins
 /// * `resource_key` - Resource identifier in format "namespace/kind/name"
 pub async fn is_disposing(resource_key: &str) -> bool {
     let set = DISPOSAL_SET.read().await;
-    if let Some(expires_at) = set.get(resource_key) {
-        if std::time::Instant::now() < *expires_at {
-            return true;
-        }
+    if let Some(expires_at) = set.get(resource_key)
+        && std::time::Instant::now() < *expires_at
+    {
+        return true;
     }
     false
 }

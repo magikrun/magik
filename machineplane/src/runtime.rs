@@ -96,22 +96,20 @@ fn inject_workplane_binary() -> Option<std::path::PathBuf> {
     let preferred_path = std::path::PathBuf::from("/var/lib/magik/bin/workplane");
 
     // Attempt to write to preferred location
-    if let Some(parent) = preferred_path.parent() {
-        if fs::create_dir_all(parent).is_ok() {
-            if let Ok(mut file) = fs::File::create(&preferred_path) {
-                if file.write_all(binary).is_ok() {
-                    let mut perms = file.metadata().ok()?.permissions();
-                    perms.set_mode(0o755);
-                    if fs::set_permissions(&preferred_path, perms).is_ok() {
-                        info!(
-                            "Injected workplane binary to {} ({} bytes)",
-                            preferred_path.display(),
-                            binary.len()
-                        );
-                        return Some(preferred_path);
-                    }
-                }
-            }
+    if let Some(parent) = preferred_path.parent()
+        && fs::create_dir_all(parent).is_ok()
+        && let Ok(mut file) = fs::File::create(&preferred_path)
+        && file.write_all(binary).is_ok()
+    {
+        let mut perms = file.metadata().ok()?.permissions();
+        perms.set_mode(0o755);
+        if fs::set_permissions(&preferred_path, perms).is_ok() {
+            info!(
+                "Injected workplane binary to {} ({} bytes)",
+                preferred_path.display(),
+                binary.len()
+            );
+            return Some(preferred_path);
         }
     }
 

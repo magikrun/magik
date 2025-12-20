@@ -224,11 +224,9 @@ async fn reconcile_replicas(network: &Network, cfg: &Config, client: &Client) ->
 
     let mut evaluated_records = Vec::new();
     for mut record in relevant_records {
-        if record.ready && record.healthy {
-            if !wdht_healthtest(network, &record).await {
-                record.ready = false;
-                record.healthy = false;
-            }
+        if record.ready && record.healthy && !wdht_healthtest(network, &record).await {
+            record.ready = false;
+            record.healthy = false;
         }
         evaluated_records.push(record);
     }

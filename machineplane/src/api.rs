@@ -282,17 +282,14 @@ pub mod kube {
     fn format_timestamp(time: &std::time::SystemTime) -> Option<String> {
         time.duration_since(std::time::UNIX_EPOCH)
             .ok()
-            .map(|d| {
+            .and_then(|d| {
                 let secs = d.as_secs();
                 // Convert to RFC 3339 format: YYYY-MM-DDTHH:MM:SSZ
                 let offset_dt = time::OffsetDateTime::from_unix_timestamp(secs as i64).ok()?;
-                Some(
-                    offset_dt
-                        .format(&time::format_description::well_known::Rfc3339)
-                        .ok()?,
-                )
+                offset_dt
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .ok()
             })
-            .flatten()
     }
 
     fn extract_workload_info(pod: &crate::runtimes::PodInfo) -> Option<WorkloadInfo> {
@@ -1243,19 +1240,18 @@ pub async fn create_tender(
     {
         let mut tracker = state.tender_tracker.write().await;
 
-        if tracker.len() >= MAX_TRACKED_TENDERS {
-            if let Some(oldest_key) = tracker
+        if tracker.len() >= MAX_TRACKED_TENDERS
+            && let Some(oldest_key) = tracker
                 .iter()
                 .min_by_key(|(_, v)| v.created_at)
                 .map(|(k, _)| k.clone())
-            {
-                log::warn!(
-                    "create_tender: tender_tracker at capacity ({}), evicting oldest tender '{}'",
-                    MAX_TRACKED_TENDERS,
-                    oldest_key
-                );
-                tracker.remove(&oldest_key);
-            }
+        {
+            log::warn!(
+                "create_tender: tender_tracker at capacity ({}), evicting oldest tender '{}'",
+                MAX_TRACKED_TENDERS,
+                oldest_key
+            );
+            tracker.remove(&oldest_key);
         }
 
         log::info!(

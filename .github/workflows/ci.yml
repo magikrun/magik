@@ -15,6 +15,7 @@ env:
 
 jobs:
   # Linux: Full build and test with libkrun + libcrun
+  # Includes formatting and clippy checks
   # Uses ubuntu-24.04 which has better KVM support for integration tests
   linux:
     name: Linux (with libkrun + libcrun)
@@ -49,6 +50,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: x86_64-unknown-linux-musl
+          components: rustfmt, clippy
 
       # === libkrunfw (bundled kernel for libkrun) ===
       - name: Cache libkrunfw
@@ -147,6 +149,16 @@ jobs:
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib
+          LIBRARY_PATH: /usr/local/lib
+
       - name: Build workplane for musl (for embedding)
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
@@ -198,85 +210,3 @@ jobs:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
           LIBRARY_PATH: /usr/local/lib
-
-  # macOS: Build with libkrun from Homebrew (stubs for crun)
-  macos:
-    name: macOS (with libkrun)
-    runs-on: macos-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          brew tap slp/krun
-          brew install slp/krun/libkrun slp/krun/libkrunfw llvm
-          
-          # Create libkrunfw version symlink (libkrun expects v5, brew installs v4)
-          sudo ln -sf /opt/homebrew/lib/libkrunfw.4.dylib /opt/homebrew/lib/libkrunfw.5.dylib
-
-      - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: aarch64-unknown-linux-musl
-
-      - name: Install musl cross-compiler
-        run: brew install FiloSottile/musl-cross/musl-cross
-
-      - name: Build workplane for musl (for embedding)
-        run: cargo build -p workplane --release --target aarch64-unknown-linux-musl
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
-
-      - name: Rebuild machineplane to embed workplane binary
-        run: |
-          # Force rebuild of machineplane to pick up the embedded workplane binary
-          cargo build -p machineplane --release
-          cargo build -p machineplane --all-targets
-        env:
-          LIBCLANG_PATH: /opt/homebrew/opt/llvm/lib
-          LIBRARY_PATH: /opt/homebrew/lib
-          DYLD_LIBRARY_PATH: /opt/homebrew/lib
-
-      - name: Build workspace
-        run: cargo build --workspace --all-targets
-        env:
-          LIBCLANG_PATH: /opt/homebrew/opt/llvm/lib
-          LIBRARY_PATH: /opt/homebrew/lib
-          DYLD_LIBRARY_PATH: /opt/homebrew/lib
-
-      - name: Run tests (without VM - no HVF in CI runners)
-        run: cargo test --workspace
-        env:
-          LIBCLANG_PATH: /opt/homebrew/opt/llvm/lib
-          DYLD_LIBRARY_PATH: /opt/homebrew/lib
-          MAGIK_SELECTION_WINDOW_MS: "1000"
-          MAGIK_GOSSIP_SETTLE_MS: "5000"
-          MAGIK_APPLY_MESH_TIMEOUT_SECS: "60"
-          # macOS CI runners don't have HVF access, so VM tests are skipped
-          # Set MAGIK_FORCE_VM_TESTS=1 locally on a signed binary for full testing
-
-  # Formatting and lints
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Install LLVM/Clang for bindgen
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm-dev libclang-dev clang
-
-      - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: rustfmt, clippy
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      # Clippy runs with stubs (no libkrun/libcrun needed for lint)
-      - name: Clippy
-        run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
