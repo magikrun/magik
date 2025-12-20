@@ -109,27 +109,39 @@ pub mod krun {
         }
 
         async fn get_status(&self, _pod_id: &str) -> RuntimeResult<PodInfo> {
-            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: not available".to_string(),
+            ))
         }
 
         async fn list(&self) -> RuntimeResult<Vec<PodInfo>> {
-            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: not available".to_string(),
+            ))
         }
 
         async fn delete(&self, _pod_id: &str) -> RuntimeResult<()> {
-            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: not available".to_string(),
+            ))
         }
 
         async fn logs(&self, _pod_id: &str, _tail: Option<usize>) -> RuntimeResult<String> {
-            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: not available".to_string(),
+            ))
         }
 
         async fn validate(&self, _manifest_content: &[u8]) -> RuntimeResult<()> {
-            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: not available".to_string(),
+            ))
         }
 
         async fn export(&self, _pod_id: &str) -> RuntimeResult<Vec<u8>> {
-            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: not available".to_string(),
+            ))
         }
     }
 }
