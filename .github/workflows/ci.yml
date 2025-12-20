@@ -10,11 +10,12 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
+  LIBKRUN_VERSION: "1.10.1"
 
 jobs:
-  # Linux: Full build and test with libcrun
+  # Linux: Full build and test with libcrun + libkrun
   linux:
-    name: Linux (with libcrun)
+    name: Linux (with libcrun + libkrun)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +37,11 @@ jobs:
             libyajl-dev \
             llvm-dev \
             libclang-dev \
-            clang
+            clang \
+            libvirglrenderer-dev \
+            libepoxy-dev \
+            libdrm-dev \
+            libpipewire-0.3-dev
             
 
       - name: Set up Rust toolchain
@@ -89,11 +94,33 @@ jobs:
           # Copy ocispec headers (generated during build)
           find libocispec -name "*.h" -exec sudo cp {} /usr/local/include/ocispec/ \;
 
+      - name: Cache libkrun build
+        id: cache-libkrun
+        uses: actions/cache@v4
+        with:
+          path: /usr/local
+          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v1
+
+      - name: Build libkrun
+        if: steps.cache-libkrun.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
+            https://github.com/containers/libkrun.git /tmp/libkrun
+          cd /tmp/libkrun
+          
+          # Build libkrun (uses Cargo)
+          make
+          sudo make install
+          
+          # Update library cache
+          sudo ldconfig
+
       - name: Verify libcrun installation
         run: |
           ls -la /usr/local/lib/
           ls -la /usr/local/lib/pkgconfig/
           pkg-config --modversion libcrun
+          pkg-config --modversion libkrun
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
 
@@ -101,25 +128,25 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --workspace --no-default-features -- -D warnings -A clippy::too_many_arguments
+        run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
 
       - name: Build
-        run: cargo build --workspace --no-default-features
+        run: cargo build --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
 
       - name: Run tests
-        run: cargo test --workspace --no-default-features
+        run: cargo test --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
 
       - name: Build release
-        run: cargo build --release --workspace --no-default-features
+        run: cargo build --release --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib
