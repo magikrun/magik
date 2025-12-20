@@ -59,7 +59,80 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 // KrunEngine: microVM isolation via libkrun (Linux KVM / macOS HVF)
+// Only available when runtime-krun feature is enabled
+#[cfg(feature = "runtime-krun")]
 pub mod krun;
+
+// Stub module when krun feature is disabled
+#[cfg(not(feature = "runtime-krun"))]
+pub mod krun {
+    //! Stub module when libkrun is not available.
+    use super::*;
+
+    /// Stub KrunEngine when libkrun is not compiled in.
+    pub struct KrunEngine;
+
+    impl KrunEngine {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl Default for KrunEngine {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    #[async_trait]
+    impl RuntimeEngine for KrunEngine {
+        fn name(&self) -> &str {
+            "krun"
+        }
+
+        async fn is_available(&self) -> bool {
+            false
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        async fn apply(
+            &self,
+            _manifest_content: &[u8],
+            _config: &DeploymentConfig,
+        ) -> RuntimeResult<PodInfo> {
+            Err(RuntimeError::EngineNotAvailable(
+                "krun: libkrun not available (enable runtime-krun feature)".to_string(),
+            ))
+        }
+
+        async fn get_status(&self, _pod_id: &str) -> RuntimeResult<PodInfo> {
+            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+        }
+
+        async fn list(&self) -> RuntimeResult<Vec<PodInfo>> {
+            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+        }
+
+        async fn delete(&self, _pod_id: &str) -> RuntimeResult<()> {
+            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+        }
+
+        async fn logs(&self, _pod_id: &str, _tail: Option<usize>) -> RuntimeResult<String> {
+            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+        }
+
+        async fn validate(&self, _manifest_content: &[u8]) -> RuntimeResult<()> {
+            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+        }
+
+        async fn export(&self, _pod_id: &str) -> RuntimeResult<Vec<u8>> {
+            Err(RuntimeError::EngineNotAvailable("krun: not available".to_string()))
+        }
+    }
+}
 
 // CrunEngine: container isolation via libcrun (functional on Linux, stubs on other platforms)
 pub mod crun;
