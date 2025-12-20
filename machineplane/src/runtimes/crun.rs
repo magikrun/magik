@@ -121,7 +121,8 @@ const MAX_ROOTFS_SIZE: u64 = 4 * 1024 * 1024 * 1024;
 /// Directory for storing container bundles.
 const BUNDLE_BASE_DIR: &str = "/var/lib/magik/bundles";
 
-/// Directory for storing container state.
+/// Directory for storing container state (reserved for future use).
+#[allow(dead_code)]
 const STATE_DIR: &str = "/var/run/magik/crun";
 
 /// Label keys for metadata.
@@ -240,6 +241,7 @@ struct OciPids {
 
 /// State of a running container.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ContainerState {
     /// Unique container identifier
     id: String,
@@ -467,14 +469,14 @@ impl CrunEngine {
             .and_then(|r| r.get("limits"))
             .and_then(|l| l.get("memory"))
             .and_then(|m| m.as_str())
-            .and_then(|s| Self::parse_memory_string(s))
+            .and_then(Self::parse_memory_string)
             .unwrap_or(DEFAULT_MEMORY_LIMIT);
 
         let cpu_shares = resources
             .and_then(|r| r.get("limits"))
             .and_then(|l| l.get("cpu"))
             .and_then(|c| c.as_str())
-            .and_then(|s| Self::parse_cpu_to_shares(s))
+            .and_then(Self::parse_cpu_to_shares)
             .unwrap_or(DEFAULT_CPU_SHARES);
 
         Ok(ContainerSpec {
@@ -490,30 +492,18 @@ impl CrunEngine {
     /// Parses a Kubernetes memory string (e.g., "512Mi", "1Gi") to bytes.
     fn parse_memory_string(s: &str) -> Option<u64> {
         let s = s.trim();
-        if s.ends_with("Gi") {
-            s[..s.len() - 2]
-                .parse::<u64>()
-                .ok()
-                .map(|v| v * 1024 * 1024 * 1024)
-        } else if s.ends_with("Mi") {
-            s[..s.len() - 2]
-                .parse::<u64>()
-                .ok()
-                .map(|v| v * 1024 * 1024)
-        } else if s.ends_with("Ki") {
-            s[..s.len() - 2].parse::<u64>().ok().map(|v| v * 1024)
-        } else if s.ends_with('G') {
-            s[..s.len() - 1]
-                .parse::<u64>()
-                .ok()
-                .map(|v| v * 1024 * 1024 * 1024)
-        } else if s.ends_with('M') {
-            s[..s.len() - 1]
-                .parse::<u64>()
-                .ok()
-                .map(|v| v * 1024 * 1024)
-        } else if s.ends_with('K') {
-            s[..s.len() - 1].parse::<u64>().ok().map(|v| v * 1024)
+        if let Some(num) = s.strip_suffix("Gi") {
+            num.parse::<u64>().ok().map(|v| v * 1024 * 1024 * 1024)
+        } else if let Some(num) = s.strip_suffix("Mi") {
+            num.parse::<u64>().ok().map(|v| v * 1024 * 1024)
+        } else if let Some(num) = s.strip_suffix("Ki") {
+            num.parse::<u64>().ok().map(|v| v * 1024)
+        } else if let Some(num) = s.strip_suffix('G') {
+            num.parse::<u64>().ok().map(|v| v * 1024 * 1024 * 1024)
+        } else if let Some(num) = s.strip_suffix('M') {
+            num.parse::<u64>().ok().map(|v| v * 1024 * 1024)
+        } else if let Some(num) = s.strip_suffix('K') {
+            num.parse::<u64>().ok().map(|v| v * 1024)
         } else {
             s.parse::<u64>().ok()
         }
@@ -522,11 +512,8 @@ impl CrunEngine {
     /// Parses a Kubernetes CPU string (e.g., "1", "500m") to cgroup shares.
     fn parse_cpu_to_shares(s: &str) -> Option<u64> {
         let s = s.trim();
-        if s.ends_with('m') {
-            s[..s.len() - 1]
-                .parse::<u64>()
-                .ok()
-                .map(|m| (m * 1024) / 1000)
+        if let Some(num) = s.strip_suffix('m') {
+            num.parse::<u64>().ok().map(|m| (m * 1024) / 1000)
         } else {
             s.parse::<u64>().ok().map(|c| c * 1024)
         }
@@ -590,7 +577,7 @@ impl CrunEngine {
         let layers = match manifest {
             oci_distribution::manifest::OciManifest::Image(img) => img.layers,
             oci_distribution::manifest::OciManifest::ImageIndex(idx) => {
-                if let Some(first) = idx.manifests.first() {
+                if let Some(_first) = idx.manifests.first() {
                     let (inner, _) =
                         client.pull_manifest(&reference, &auth).await.map_err(|e| {
                             RuntimeError::DeploymentFailed(format!(
@@ -871,7 +858,7 @@ impl CrunEngine {
     }
 
     /// Writes the OCI spec to config.json.
-    fn write_oci_spec(&self, bundle_path: &PathBuf, spec: &OciSpec) -> RuntimeResult<()> {
+    fn write_oci_spec(&self, bundle_path: &std::path::Path, spec: &OciSpec) -> RuntimeResult<()> {
         let config_path = bundle_path.join("config.json");
         let json = serde_json::to_string_pretty(spec).map_err(|e| {
             RuntimeError::DeploymentFailed(format!("Failed to serialize OCI spec: {}", e))
@@ -1337,12 +1324,11 @@ impl RuntimeEngine for CrunEngine {
             }
         };
 
-        if let Some(path) = bundle_path {
-            if path.exists() {
-                if let Err(e) = std::fs::remove_dir_all(&path) {
-                    warn!("Failed to cleanup bundle {}: {}", path.display(), e);
-                }
-            }
+        if let Some(path) = bundle_path
+            && path.exists()
+            && let Err(e) = std::fs::remove_dir_all(&path)
+        {
+            warn!("Failed to cleanup bundle {}: {}", path.display(), e);
         }
 
         info!("Container {} deleted", pod_id);
