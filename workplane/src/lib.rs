@@ -48,17 +48,17 @@
 //! agent.run().await?;
 //! ```
 
+pub mod agent;
 pub mod config;
 pub mod discovery;
-pub mod raft;
 pub mod network;
-pub mod selfheal;
+pub mod raft;
 pub mod rpc;
-pub mod agent;
+pub mod selfheal;
 pub mod supervisor;
 
 mod metrics;
 
-pub use config::Config;
 pub use agent::Agent;
+pub use config::Config;
 pub use supervisor::run_supervisor;

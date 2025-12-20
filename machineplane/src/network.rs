@@ -131,7 +131,7 @@ fn handle_control_message(
             let node = node.clone();
             let local_identity_for_sched = local_identity.clone();
             let payload_for_sched = payload.clone();
-            
+
             if let Err(e) = sched_input_tx.try_send((
                 BEEMESH_FABRIC.to_string(),
                 local_identity_for_sched,
@@ -139,15 +139,17 @@ fn handle_control_message(
             )) {
                 warn!("Failed to deliver tender to local scheduler: {}", e);
             }
-            
+
             let _ = reply_tx.send(Ok(()));
-            
+
             tokio::spawn(async move {
                 debug!("Spawned task: calling node.publish for mesh broadcast");
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    node.publish(BEEMESH_FABRIC, payload.clone())
-                ).await {
+                    node.publish(BEEMESH_FABRIC, payload.clone()),
+                )
+                .await
+                {
                     Ok(Ok(_)) => {
                         debug!("Mesh publish completed successfully");
                     }
@@ -165,7 +167,7 @@ fn handle_control_message(
             let node = node.clone();
             let local_identity_for_sched = local_identity.clone();
             let payload_for_sched = payload.clone();
-            
+
             if let Err(e) = sched_input_tx.try_send((
                 BEEMESH_FABRIC.to_string(),
                 local_identity_for_sched,
@@ -173,7 +175,7 @@ fn handle_control_message(
             )) {
                 warn!("Failed to deliver disposal to local scheduler: {}", e);
             }
-            
+
             tokio::spawn(async move {
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(5),
@@ -192,7 +194,7 @@ fn handle_control_message(
                     }
                 }
             });
-            
+
             let _ = reply_tx.send(Ok(()));
         }
 
@@ -209,7 +211,6 @@ fn handle_control_message(
         }
     }
 }
-
 
 /// Retrieves a node keypair by identity.
 ///
@@ -340,7 +341,6 @@ pub async fn setup_korium_node(bind_addr: &str) -> Result<NodeSetupResult> {
 
     info!("Korium node identity: {}", node.identity());
     info!("Korium listening on: {:?}", node.local_addr()?);
-
 
     let (peer_tx, peer_rx) = watch::channel(Vec::new());
 

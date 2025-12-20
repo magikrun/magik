@@ -24,8 +24,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::time::{Duration, Instant};
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 /// Minimum election timeout (milliseconds).
 /// Override via BEEMESH_ELECTION_TIMEOUT_MIN_MS environment variable.
@@ -62,8 +62,7 @@ pub enum RaftState {
 }
 
 /// Role exposed to the application layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RaftRole {
     /// This node is the leader
     Leader,

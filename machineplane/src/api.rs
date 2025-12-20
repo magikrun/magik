@@ -33,13 +33,13 @@
 use crate::messages::CandidateNode;
 use crate::network::BEEMESH_FABRIC;
 use crate::network::NetworkControl;
-use crate::scheduler::{register_local_manifest, DEFAULT_SELECTION_WINDOW_MS};
+use crate::scheduler::{DEFAULT_SELECTION_WINDOW_MS, register_local_manifest};
 use axum::{
+    Router,
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
-    Router,
 };
 use base64::Engine;
 use log::{debug, error, info};
@@ -49,11 +49,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
 use tokio::{
     sync::watch,
-    time::{timeout, Duration},
+    time::{Duration, timeout},
 };
 use uuid::Uuid;
 
@@ -69,7 +69,9 @@ fn format_debug_timestamp(time: &std::time::SystemTime) -> Option<String> {
             time::OffsetDateTime::from_unix_timestamp(secs as i64)
                 .ok()
                 .and_then(|offset_dt| {
-                    offset_dt.format(&time::format_description::well_known::Rfc3339).ok()
+                    offset_dt
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .ok()
                 })
         })
 }
@@ -94,20 +96,20 @@ pub mod kube {
     use super::RestState;
     use crate::scheduler::register_local_manifest;
     use axum::{
+        Json, Router,
         body::Bytes,
         extract::{Path, Query, State},
         http::StatusCode,
         routing::get,
-        Json, Router,
     };
     use log::{error, info, warn};
     use rand::RngCore;
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
     use sha2::{Digest, Sha256};
     use std::collections::HashMap;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::mpsc;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
     use uuid::Uuid;
 
     // Kubernetes resource kinds
@@ -157,16 +159,12 @@ pub mod kube {
                 "/namespaces/{namespace}/statefulsets/{name}",
                 get(get_statefulset).delete(delete_statefulset),
             )
-            .route(
-                "/namespaces/{namespace}/replicasets",
-                get(list_replicasets),
-            )
+            .route("/namespaces/{namespace}/replicasets", get(list_replicasets))
             .route(
                 "/namespaces/{namespace}/replicasets/{name}",
                 get(get_replicaset),
             )
     }
-
 
     pub async fn api_group_list() -> Json<Value> {
         Json(json!({
@@ -253,7 +251,6 @@ pub mod kube {
         }))
     }
 
-
     #[derive(Debug, Clone)]
     struct WorkloadInfo {
         name: String,
@@ -289,7 +286,11 @@ pub mod kube {
                 let secs = d.as_secs();
                 // Convert to RFC 3339 format: YYYY-MM-DDTHH:MM:SSZ
                 let offset_dt = time::OffsetDateTime::from_unix_timestamp(secs as i64).ok()?;
-                Some(offset_dt.format(&time::format_description::well_known::Rfc3339).ok()?)
+                Some(
+                    offset_dt
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .ok()?,
+                )
             })
             .flatten()
     }
@@ -374,7 +375,6 @@ pub mod kube {
 
         workloads.into_values().collect()
     }
-
 
     fn build_deployment_response(info: &WorkloadInfo) -> Value {
         json!({
@@ -517,7 +517,6 @@ pub mod kube {
         })))
     }
 
-
     fn build_statefulset_response(info: &WorkloadInfo) -> Value {
         json!({
             "apiVersion": APPS_V1,
@@ -597,7 +596,8 @@ pub mod kube {
         body: Bytes,
     ) -> Result<Json<Value>, StatusCode> {
         let manifest = parse_manifest(&body)?;
-        let (manifest, ns, name) = ensure_metadata(manifest, &namespace, STATEFULSET_KIND, APPS_V1)?;
+        let (manifest, ns, name) =
+            ensure_metadata(manifest, &namespace, STATEFULSET_KIND, APPS_V1)?;
 
         if ns != namespace {
             return Err(StatusCode::BAD_REQUEST);
@@ -651,7 +651,6 @@ pub mod kube {
             }
         })))
     }
-
 
     fn build_replicaset_response(info: &WorkloadInfo) -> Value {
         let rs_name = format!("{}-rs", info.name);
@@ -732,7 +731,6 @@ pub mod kube {
 
         Err(StatusCode::NOT_FOUND)
     }
-
 
     fn build_pod_response(pod: &crate::runtimes::PodInfo) -> Value {
         let labels = &pod.metadata;
@@ -831,7 +829,14 @@ pub mod kube {
         })?;
 
         for pod in &pods {
-            if pod.name == name && (pod.namespace == namespace || pod.metadata.get(LABEL_POD_NAMESPACE).map(|ns| ns == &namespace).unwrap_or(false)) {
+            if pod.name == name
+                && (pod.namespace == namespace
+                    || pod
+                        .metadata
+                        .get(LABEL_POD_NAMESPACE)
+                        .map(|ns| ns == &namespace)
+                        .unwrap_or(false))
+            {
                 return Ok(Json(build_pod_response(pod)));
             }
             // Also check by pod ID
@@ -869,7 +874,6 @@ pub mod kube {
         }
     }
 
-
     /// Maximum allowed manifest size (1 MiB) to prevent memory exhaustion
     /// from oversized or malicious YAML/JSON payloads.
     const MAX_MANIFEST_SIZE: usize = 1024 * 1024;
@@ -889,7 +893,8 @@ pub mod kube {
             return Err(StatusCode::PAYLOAD_TOO_LARGE);
         }
         serde_json::from_slice(body).or_else(|_| {
-            let yaml: serde_yaml::Value = serde_yaml::from_slice(body).map_err(|_| StatusCode::BAD_REQUEST)?;
+            let yaml: serde_yaml::Value =
+                serde_yaml::from_slice(body).map_err(|_| StatusCode::BAD_REQUEST)?;
             serde_json::to_value(yaml).map_err(|_| StatusCode::BAD_REQUEST)
         })
     }
@@ -935,7 +940,10 @@ pub mod kube {
 
     fn build_delete_manifest(namespace: &str, name: &str, kind: &str, api_version: &str) -> Value {
         let mut annotations = Map::new();
-        annotations.insert("magik.io/operation".into(), Value::String("delete".to_string()));
+        annotations.insert(
+            "magik.io/operation".into(),
+            Value::String("delete".to_string()),
+        );
 
         let mut metadata = Map::new();
         metadata.insert("name".into(), Value::String(name.to_string()));
@@ -953,8 +961,12 @@ pub mod kube {
         })
     }
 
-    async fn publish_workload_tender(state: &RestState, manifest: &Value) -> Result<String, StatusCode> {
-        let manifest_str = serde_json::to_string(manifest).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    async fn publish_workload_tender(
+        state: &RestState,
+        manifest: &Value,
+    ) -> Result<String, StatusCode> {
+        let manifest_str =
+            serde_json::to_string(manifest).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1099,7 +1111,10 @@ pub fn build_router(
         .route("/tenders/{tender_id}", get(get_tender_status))
         .route("/disposal/{namespace}/{kind}/{name}", delete(delete_tender))
         .route("/tenders/{tender_id}/candidates", post(get_candidates))
-        .route("/disposal/{namespace}/{kind}/{name}", get(get_disposal_status))
+        .route(
+            "/disposal/{namespace}/{kind}/{name}",
+            get(get_disposal_status),
+        )
         .route("/nodes", get(get_nodes))
         .merge(kube_routes)
         .with_state(state)
@@ -1314,7 +1329,10 @@ pub async fn create_tender(
             return Err(StatusCode::BAD_GATEWAY);
         }
         Err(_) => {
-            log::warn!("create_tender: timed out publishing tender_id={}", tender_id);
+            log::warn!(
+                "create_tender: timed out publishing tender_id={}",
+                tender_id
+            );
             return Err(StatusCode::GATEWAY_TIMEOUT);
         }
     }
@@ -1477,7 +1495,10 @@ async fn debug_pods(State(state): State<RestState>) -> axum::Json<serde_json::Va
                     .unwrap_or_default();
 
                 let mut metadata = serde_json::Map::new();
-                metadata.insert("name".to_string(), serde_json::Value::String(app_name.clone()));
+                metadata.insert(
+                    "name".to_string(),
+                    serde_json::Value::String(app_name.clone()),
+                );
                 for (k, v) in labels {
                     metadata.insert(k.clone(), serde_json::Value::String(v.clone()));
                 }
@@ -1591,8 +1612,8 @@ pub async fn delete_tender(
         nonce: rand::thread_rng().next_u64(),
     };
 
-    let disposal_bytes = bincode::serialize(&disposal)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let disposal_bytes =
+        bincode::serialize(&disposal).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let (reply_tx, mut reply_rx) = mpsc::unbounded_channel();
     state
@@ -1630,8 +1651,8 @@ pub async fn delete_tender(
         resource: resource_coord,
         removed_pods: vec![], // Fire-and-forget - no immediate confirmation
     };
-    let response_data = bincode::serialize(&response)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let response_data =
+        bincode::serialize(&response).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     axum::response::Response::builder()
         .status(200)

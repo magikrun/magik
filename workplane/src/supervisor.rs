@@ -18,7 +18,7 @@
 use anyhow::{Context, Result};
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tracing::{debug, error, info, warn};
 
 /// Parses a command string into program and arguments.
@@ -108,12 +108,10 @@ pub async fn run_supervisor(exec_command: &str) -> Result<i32> {
     let child_pid = child.id();
 
     // Set up signal handlers
-    let mut sigterm = signal(SignalKind::terminate())
-        .context("Failed to set up SIGTERM handler")?;
-    let mut sigint = signal(SignalKind::interrupt())
-        .context("Failed to set up SIGINT handler")?;
-    let mut sigchld = signal(SignalKind::child())
-        .context("Failed to set up SIGCHLD handler")?;
+    let mut sigterm =
+        signal(SignalKind::terminate()).context("Failed to set up SIGTERM handler")?;
+    let mut sigint = signal(SignalKind::interrupt()).context("Failed to set up SIGINT handler")?;
+    let mut sigchld = signal(SignalKind::child()).context("Failed to set up SIGCHLD handler")?;
 
     info!(pid = ?child_pid, "Init supervisor running, waiting for child");
 

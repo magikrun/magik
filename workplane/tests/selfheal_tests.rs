@@ -99,7 +99,10 @@ fn config_is_stateful_detection() {
     assert!(!cfg.is_stateful(), "StatelessWorkload should be stateless");
 
     cfg.workload_kind = "deployment".to_string(); // lowercase
-    assert!(!cfg.is_stateful(), "deployment (lowercase) should be stateless");
+    assert!(
+        !cfg.is_stateful(),
+        "deployment (lowercase) should be stateless"
+    );
 
     // Stateful kinds
     cfg.workload_kind = "StatefulSet".to_string();
@@ -109,7 +112,10 @@ fn config_is_stateful_detection() {
     assert!(cfg.is_stateful(), "StatefulWorkload should be stateful");
 
     cfg.workload_kind = "statefulset".to_string(); // lowercase
-    assert!(cfg.is_stateful(), "statefulset (lowercase) should be stateful");
+    assert!(
+        cfg.is_stateful(),
+        "statefulset (lowercase) should be stateful"
+    );
 }
 
 /// Verifies that task_kind() returns correct API task type.
@@ -493,15 +499,14 @@ fn ranking_deterministic_with_peer_id() {
 #[test]
 fn partition_healthy_unhealthy() {
     let records = vec![
-        make_record("default", "nginx", "peer-1", true, true, None),   // healthy
+        make_record("default", "nginx", "peer-1", true, true, None), // healthy
         make_record("default", "nginx", "peer-2", false, false, None), // unhealthy
-        make_record("default", "nginx", "peer-3", true, true, None),   // healthy
-        make_record("default", "nginx", "peer-4", true, false, None),  // ready but not healthy
+        make_record("default", "nginx", "peer-3", true, true, None), // healthy
+        make_record("default", "nginx", "peer-4", true, false, None), // ready but not healthy
     ];
 
-    let (healthy, unhealthy): (Vec<ServiceRecord>, Vec<ServiceRecord>) = records
-        .into_iter()
-        .partition(|r| r.ready && r.healthy);
+    let (healthy, unhealthy): (Vec<ServiceRecord>, Vec<ServiceRecord>) =
+        records.into_iter().partition(|r| r.ready && r.healthy);
 
     assert_eq!(healthy.len(), 2);
     assert_eq!(unhealthy.len(), 2);

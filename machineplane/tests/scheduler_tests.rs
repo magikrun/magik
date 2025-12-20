@@ -46,13 +46,7 @@ fn create_tender(id: &str, timestamp: u64, nonce: u64) -> Tender {
 
 /// Creates a bid for testing.
 /// Note: Signing is handled by Korium at transport level.
-fn create_bid(
-    tender_id: &str,
-    node_id: &str,
-    score: f64,
-    timestamp: u64,
-    nonce: u64,
-) -> Bid {
+fn create_bid(tender_id: &str, node_id: &str, score: f64, timestamp: u64, nonce: u64) -> Bid {
     Bid {
         tender_id: tender_id.to_string(),
         node_id: node_id.to_string(),
@@ -608,17 +602,10 @@ fn topic_hash_comparison_filters_wrong_topic() {
     let another_wrong = "magik-other";
 
     // Same topic should match
-    assert_eq!(
-        fabric_topic,
-        BEEMESH_FABRIC,
-        "Same topic name MUST match"
-    );
+    assert_eq!(fabric_topic, BEEMESH_FABRIC, "Same topic name MUST match");
 
     // Different topics should NOT match
-    assert_ne!(
-        fabric_topic, wrong_topic,
-        "Different topic MUST not match"
-    );
+    assert_ne!(fabric_topic, wrong_topic, "Different topic MUST not match");
     assert_ne!(
         fabric_topic, another_wrong,
         "Similar but different topic MUST not match"
@@ -634,10 +621,7 @@ fn topic_filtering_is_case_sensitive() {
     let uppercase = "BEEMESH-FABRIC";
     let mixed = "BeeMesh-Fabric";
 
-    assert_ne!(
-        correct, uppercase,
-        "Topic matching MUST be case-sensitive"
-    );
+    assert_ne!(correct, uppercase, "Topic matching MUST be case-sensitive");
     assert_ne!(correct, mixed, "Topic matching MUST be case-sensitive");
 }
 
@@ -690,8 +674,5 @@ fn bid_nonces_are_unique() {
 fn bid_contains_node_id() {
     let bid = create_bid("tender-1", "node-xyz", 0.9, now_ms(), 12345);
 
-    assert_eq!(
-        bid.node_id, "node-xyz",
-        "Bid MUST contain correct node_id"
-    );
+    assert_eq!(bid.node_id, "node-xyz", "Bid MUST contain correct node_id");
 }

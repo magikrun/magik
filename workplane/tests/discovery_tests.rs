@@ -124,7 +124,10 @@ fn remove_deletes_specific_peer() {
 #[test]
 fn list_returns_empty_for_unknown_workload() {
     let records = discovery::list("nonexistent", "Deployment", "unknown-workload");
-    assert!(records.is_empty(), "Unknown workload should return empty list");
+    assert!(
+        records.is_empty(),
+        "Unknown workload should return empty list"
+    );
 }
 
 /// Verifies that remove() is idempotent for non-existent records.
@@ -215,7 +218,10 @@ fn conflict_resolution_same_version_older_timestamp_rejected() {
     discovery::put(new_record, Duration::from_secs(60));
     let replaced = discovery::put(old_record, Duration::from_secs(60));
 
-    assert!(!replaced, "Older timestamp should NOT win with same version");
+    assert!(
+        !replaced,
+        "Older timestamp should NOT win with same version"
+    );
 
     let records = discovery::list("default", "Deployment", &workload);
     assert_eq!(records[0].ts, ts + 1000);
@@ -314,10 +320,7 @@ fn freshness_rejects_future_timestamp() {
     let future_record = make_record("default", &workload, "peer-future", 1, ts + 60_000);
     let inserted = discovery::put(future_record, Duration::from_secs(60));
 
-    assert!(
-        !inserted,
-        "Future timestamp (60s ahead) should be rejected"
-    );
+    assert!(!inserted, "Future timestamp (60s ahead) should be rejected");
 }
 
 // ============================================================================
@@ -339,7 +342,10 @@ fn ttl_expiration_purges_on_list() {
 
     // List should return empty (record expired)
     let records = discovery::list("default", "Deployment", &workload);
-    assert!(records.is_empty(), "Expired records should be purged on list()");
+    assert!(
+        records.is_empty(),
+        "Expired records should be purged on list()"
+    );
 }
 
 /// Verifies that records with long TTL persist.

@@ -10,7 +10,7 @@ fn main() {
     // Determine the target architecture for the workplane binary
     let target = env::var("TARGET").unwrap_or_default();
     let host = env::var("HOST").unwrap_or_default();
-    
+
     // We need the musl-linked binary for the container/VM
     // The workplane binary must match the architecture of the VM, not the host
     let workplane_target = if target.contains("linux") && target.contains("musl") {
@@ -28,7 +28,7 @@ fn main() {
     // Look for the workplane binary in the target directory
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let workspace_root = PathBuf::from(&manifest_dir).parent().unwrap().to_path_buf();
-    
+
     let binary_path = workspace_root
         .join("target")
         .join(&workplane_target)

@@ -222,7 +222,6 @@ async fn reconcile_replicas(network: &Network, cfg: &Config, client: &Client) ->
     let desired_replicas = cfg.replicas.max(1);
     let relevant_records = current_workload_records(network, cfg);
 
-
     let mut evaluated_records = Vec::new();
     for mut record in relevant_records {
         if record.ready && record.healthy {
@@ -252,17 +251,17 @@ async fn reconcile_replicas(network: &Network, cfg: &Config, client: &Client) ->
     crate::gauge!("workplane.replicas.healthy", healthy.len() as f64);
     crate::gauge!("workplane.replicas.unhealthy", unhealthy.len() as f64);
 
-
     let mut duplicates = Vec::new();
     if cfg.is_stateful() {
         let mut seen = HashSet::new();
         let mut deduped = Vec::new();
         for record in healthy.into_iter() {
             if let Some(ord) = record.ordinal
-                && !seen.insert(ord) {
-                    duplicates.push(record);
-                    continue;
-                }
+                && !seen.insert(ord)
+            {
+                duplicates.push(record);
+                continue;
+            }
             deduped.push(record);
         }
         healthy = deduped;
@@ -288,7 +287,6 @@ async fn reconcile_replicas(network: &Network, cfg: &Config, client: &Client) ->
             }
         }
     }
-
 
     let mut removal_candidates = Vec::new();
     removal_candidates.extend(duplicates);
@@ -328,12 +326,7 @@ async fn reconcile_replicas(network: &Network, cfg: &Config, client: &Client) ->
     Ok(())
 }
 
-
-async fn publish_clone_tender(
-    cfg: &Config,
-    client: &Client,
-    ordinal: Option<u32>,
-) -> Result<()> {
+async fn publish_clone_tender(cfg: &Config, client: &Client, ordinal: Option<u32>) -> Result<()> {
     let tender = Tender {
         tender_id: Uuid::new_v4().to_string(),
         kind: cfg.task_kind().to_string(),
@@ -345,10 +338,7 @@ async fn publish_clone_tender(
         spec: ordinal.map(|ord| json!({ "ordinal": ord })),
     };
 
-    let url = format!(
-        "{}/v1/publish_tender",
-        cfg.magik_api.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/publish_tender", cfg.magik_api.trim_end_matches('/'));
     let resp = client
         .post(url)
         .json(&tender)
@@ -407,7 +397,6 @@ async fn remove_replica(cfg: &Config, client: &Client, record: &ServiceRecord) -
     retry_with_backoff(action, cfg.replica_check_interval).await
 }
 
-
 async fn check_disposal_status(client: &Client, cfg: &Config) -> Result<bool> {
     let workload_id = cfg.workload_id();
     let url = format!(
@@ -427,7 +416,10 @@ async fn check_disposal_status(client: &Client, cfg: &Config) -> Result<bool> {
     }
 
     let body: serde_json::Value = resp.json().await.context("parse disposal response")?;
-    Ok(body.get("disposing").and_then(|v| v.as_bool()).unwrap_or(false))
+    Ok(body
+        .get("disposing")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false))
 }
 
 fn self_terminate(workload_id: &str) -> ! {
@@ -468,7 +460,6 @@ async fn probe_url(client: &Client, url: &str) -> bool {
         Err(_) => false,
     }
 }
-
 
 fn missing_stateful_ordinals(desired_replicas: usize, records: &[ServiceRecord]) -> Vec<u32> {
     let mut present = std::collections::HashSet::new();

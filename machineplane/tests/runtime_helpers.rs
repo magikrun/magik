@@ -80,10 +80,7 @@ pub async fn wait_for_local_multiaddr(
     while start.elapsed() < timeout {
         if let Some(identity) = fetch_local_identity(rest_api_host, rest_api_port).await {
             // Korium bootstrap format: <identity>@<ip:port>
-            let address = format!(
-                "{}@{}:{}",
-                identity, display_host, korium_port
-            );
+            let address = format!("{}@{}:{}", identity, display_host, korium_port);
             log::info!("detected local address with identity: {}", address);
             return Some(address);
         }
@@ -138,10 +135,8 @@ async fn log_local_address(
                 if map.get("ok").and_then(|v| v.as_bool()) == Some(true) {
                     if let Some(identity) = map.get("local_identity").and_then(|v| v.as_str()) {
                         // Korium bootstrap format: <identity>@<ip:port>
-                        let korium_address = format!(
-                            "{}@{}:{}",
-                            identity, display_host, korium_port
-                        );
+                        let korium_address =
+                            format!("{}@{}:{}", identity, display_host, korium_port);
                         log::info!(
                             "machineplane node at {} reports Korium address {}",
                             base,

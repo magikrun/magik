@@ -160,7 +160,10 @@ impl Config {
     ///
     /// Format: `{namespace}/{kind}/{name}`
     pub fn workload_id(&self) -> String {
-        format!("{}/{}/{}", self.namespace, self.workload_kind, self.workload_name)
+        format!(
+            "{}/{}/{}",
+            self.namespace, self.workload_kind, self.workload_name
+        )
     }
 
     /// Extracts the ordinal index from a StatefulSet pod name.

@@ -217,11 +217,7 @@ pub trait RuntimeEngine: Send + Sync {
     async fn delete(&self, pod_id: &str) -> RuntimeResult<()>;
 
     /// Gets logs from a pod
-    async fn logs(
-        &self,
-        pod_id: &str,
-        tail: Option<usize>,
-    ) -> RuntimeResult<String>;
+    async fn logs(&self, pod_id: &str, tail: Option<usize>) -> RuntimeResult<String>;
 
     /// Validates a manifest without deploying
     async fn validate(&self, manifest_content: &[u8]) -> RuntimeResult<()>;

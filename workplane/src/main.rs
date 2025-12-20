@@ -29,7 +29,7 @@ use tokio::signal;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
-use workplane::{Config, Agent, run_supervisor};
+use workplane::{Agent, Config, run_supervisor};
 
 /// Command-line arguments for the workplane agent.
 #[derive(Parser, Debug)]
@@ -52,7 +52,11 @@ struct Args {
     replicas: usize,
 
     /// Workload kind (Deployment, StatefulSet, DaemonSet)
-    #[arg(long = "workload-kind", env = "BEE_WORKLOAD_KIND", default_value = "Deployment")]
+    #[arg(
+        long = "workload-kind",
+        env = "BEE_WORKLOAD_KIND",
+        default_value = "Deployment"
+    )]
     workload_kind: String,
 
     /// HTTP endpoint for liveness probes
@@ -204,9 +208,7 @@ async fn run() -> Result<()> {
         // The supervisor runs concurrently with the mesh agent
         let supervisor_handle = tokio::spawn({
             let exec_cmd = exec_cmd.clone();
-            async move {
-                run_supervisor(&exec_cmd).await
-            }
+            async move { run_supervisor(&exec_cmd).await }
         });
 
         // Wait for either supervisor exit or ctrl+c

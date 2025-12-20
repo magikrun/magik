@@ -40,8 +40,7 @@ pub struct ApplyResponse {
 }
 
 /// Request to delete a workload from the mesh.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct DeleteRequest {
     /// Kubernetes namespace of the workload
     pub namespace: String,
@@ -80,8 +79,7 @@ pub struct Health {
 ///
 /// Published to the mesh when a node receives a new deployment request.
 /// Other nodes will respond with bids if they can run the workload.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Tender {
     /// Unique tender identifier (UUID)
     pub id: String,
@@ -324,8 +322,6 @@ impl Default for ApplyRequest {
     }
 }
 
-
-
 impl Default for AwardWithManifest {
     fn default() -> Self {
         Self {
@@ -392,7 +388,7 @@ where
     T: serde::Deserialize<'a>,
 {
     use bincode::Options;
-    
+
     bincode::DefaultOptions::new()
         .with_limit(MAX_BINCODE_SIZE)
         .with_fixint_encoding()

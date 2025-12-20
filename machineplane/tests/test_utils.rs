@@ -200,8 +200,7 @@ async fn log_local_address(
         Ok(resp) => match resp.json::<Value>().await {
             Ok(Value::Object(map)) => {
                 if map.get("ok").and_then(|v| v.as_bool()) == Some(true) {
-                    if let Some(identity) = map.get("local_identity")
-                        .and_then(|v| v.as_str()) {
+                    if let Some(identity) = map.get("local_identity").and_then(|v| v.as_str()) {
                         let node_address = format!("{}:{}/{}", display_host, korium_port, identity);
                         log::info!(
                             "machineplane node at {} reports identity {}",
@@ -217,11 +216,7 @@ async fn log_local_address(
                 log::warn!("machineplane node at {} returned unexpected JSON", base);
             }
             Err(err) => {
-                log::warn!(
-                    "failed to parse identity response from {}: {}",
-                    base,
-                    err
-                );
+                log::warn!("failed to parse identity response from {}: {}", base, err);
             }
         },
         Err(err) => {
@@ -317,8 +312,8 @@ pub async fn get_node_identities(client: &Client, ports: &[u16]) -> StdHashMap<u
             {
                 Ok(resp) => match resp.json::<Value>().await {
                     Ok(json) if json.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                        if let Some(identity) = json.get("local_identity")
-                            .and_then(|v| v.as_str()) {
+                        if let Some(identity) = json.get("local_identity").and_then(|v| v.as_str())
+                        {
                             return (port, Some(identity.to_string()));
                         }
                     }
@@ -599,7 +594,7 @@ pub async fn check_instance_deployment(
                                                 .get("name")
                                                 .or_else(|| metadata.get("app.kubernetes.io/name"))
                                                 .and_then(|v| v.as_str());
-                                            
+
                                             if app_name == Some("my-nginx") {
                                                 // Check pod status first - only verify manifest for Running pods
                                                 let is_running = pod_info
@@ -607,7 +602,7 @@ pub async fn check_instance_deployment(
                                                     .and_then(|v| v.as_str())
                                                     .map(|s| s == "Running")
                                                     .unwrap_or(false);
-                                                
+
                                                 // If not running, treat as "not yet deployed" to keep waiting
                                                 if !is_running {
                                                     log::info!(
@@ -616,7 +611,7 @@ pub async fn check_instance_deployment(
                                                     );
                                                     continue;
                                                 }
-                                                
+
                                                 // Found pod by app name - verify exported manifest
                                                 // is valid K8s YAML (has apiVersion and kind)
                                                 // Note: Pod name may differ from app name due to pod_id

@@ -146,13 +146,12 @@ pub fn put(record: ServiceRecord, ttl: Duration) -> bool {
         }
     }
 
-    let namespace_map = dht
-        .entry(record.workload_id.clone())
-        .or_default();
+    let namespace_map = dht.entry(record.workload_id.clone()).or_default();
 
     purge_expired(namespace_map);
 
-    if !namespace_map.contains_key(&record.peer_id) && namespace_map.len() >= MAX_PEERS_PER_WORKLOAD {
+    if !namespace_map.contains_key(&record.peer_id) && namespace_map.len() >= MAX_PEERS_PER_WORKLOAD
+    {
         return false;
     }
 

@@ -205,10 +205,7 @@ impl KrunEngine {
     }
 
     /// Extracts container specification from a K8s manifest.
-    fn parse_container_spec(
-        &self,
-        doc: &serde_yaml::Value,
-    ) -> RuntimeResult<ContainerSpec> {
+    fn parse_container_spec(&self, doc: &serde_yaml::Value) -> RuntimeResult<ContainerSpec> {
         let spec = doc
             .get("spec")
             .ok_or_else(|| RuntimeError::InvalidManifest("Missing spec".to_string()))?;
@@ -392,14 +389,15 @@ impl KrunEngine {
         }
 
         // Validate image reference contains only safe characters
-        if !image.chars().all(|c| c.is_ascii_alphanumeric()
-            || c == '/'
-            || c == ':'
-            || c == '.'
-            || c == '-'
-            || c == '_'
-            || c == '@')
-        {
+        if !image.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || c == '/'
+                || c == ':'
+                || c == '.'
+                || c == '-'
+                || c == '_'
+                || c == '@'
+        }) {
             return Err(RuntimeError::InvalidManifest(
                 "Image reference contains invalid characters".to_string(),
             ));
@@ -423,10 +421,9 @@ impl KrunEngine {
 
         // Pull image manifest
         let auth = RegistryAuth::Anonymous;
-        let (manifest, _digest) = client
-            .pull_manifest(&reference, &auth)
-            .await
-            .map_err(|e| RuntimeError::DeploymentFailed(format!("Failed to pull manifest: {}", e)))?;
+        let (manifest, _digest) = client.pull_manifest(&reference, &auth).await.map_err(|e| {
+            RuntimeError::DeploymentFailed(format!("Failed to pull manifest: {}", e))
+        })?;
 
         // Get layer digests from manifest, resolving multi-arch if needed
         let layers = match manifest {
@@ -493,7 +490,7 @@ impl KrunEngine {
                     _ => {
                         return Err(RuntimeError::DeploymentFailed(
                             "Nested image index not supported".to_string(),
-                        ))
+                        ));
                     }
                 }
             }
@@ -686,12 +683,8 @@ impl KrunEngine {
 
             // Set workload (entrypoint + args + env)
             let argv = [entrypoint.as_ptr(), args_cstr.as_ptr(), std::ptr::null()];
-            if krun_sys::krun_set_exec(
-                ctx,
-                entrypoint.as_ptr(),
-                argv.as_ptr(),
-                env_ptrs.as_ptr(),
-            ) != 0
+            if krun_sys::krun_set_exec(ctx, entrypoint.as_ptr(), argv.as_ptr(), env_ptrs.as_ptr())
+                != 0
             {
                 krun_sys::krun_free_ctx(ctx);
                 return Err(RuntimeError::DeploymentFailed(
@@ -895,9 +888,9 @@ impl RuntimeEngine for KrunEngine {
             RuntimeError::CommandFailed("Failed to acquire VM registry lock".to_string())
         })?;
 
-        let vm = vms.get(pod_id).ok_or_else(|| {
-            RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id))
-        })?;
+        let vm = vms
+            .get(pod_id)
+            .ok_or_else(|| RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id)))?;
 
         let status = if let Some(pid) = vm.pid {
             if self.is_vm_running(pid) {
@@ -963,9 +956,8 @@ impl RuntimeEngine for KrunEngine {
             vms.remove(pod_id)
         };
 
-        let vm = vm.ok_or_else(|| {
-            RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id))
-        })?;
+        let vm =
+            vm.ok_or_else(|| RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id)))?;
 
         // Stop the VM if running
         if let Some(pid) = vm.pid {
@@ -1016,9 +1008,9 @@ impl RuntimeEngine for KrunEngine {
             RuntimeError::CommandFailed("Failed to acquire VM registry lock".to_string())
         })?;
 
-        let vm = vms.get(pod_id).ok_or_else(|| {
-            RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id))
-        })?;
+        let vm = vms
+            .get(pod_id)
+            .ok_or_else(|| RuntimeError::InstanceNotFound(format!("VM {} not found", pod_id)))?;
 
         // For now, just serialize the state - full migration would need
         // memory checkpointing which libkrun doesn't currently support
@@ -1045,10 +1037,7 @@ mod tests {
         assert_eq!(KrunEngine::parse_memory_string("1Gi"), Some(1024));
         assert_eq!(KrunEngine::parse_memory_string("2G"), Some(2048));
         assert_eq!(KrunEngine::parse_memory_string("256M"), Some(256));
-        assert_eq!(
-            KrunEngine::parse_memory_string("1073741824"),
-            Some(1024)
-        ); // 1GB in bytes
+        assert_eq!(KrunEngine::parse_memory_string("1073741824"), Some(1024)); // 1GB in bytes
     }
 
     #[test]

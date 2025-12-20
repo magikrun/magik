@@ -491,15 +491,27 @@ impl CrunEngine {
     fn parse_memory_string(s: &str) -> Option<u64> {
         let s = s.trim();
         if s.ends_with("Gi") {
-            s[..s.len() - 2].parse::<u64>().ok().map(|v| v * 1024 * 1024 * 1024)
+            s[..s.len() - 2]
+                .parse::<u64>()
+                .ok()
+                .map(|v| v * 1024 * 1024 * 1024)
         } else if s.ends_with("Mi") {
-            s[..s.len() - 2].parse::<u64>().ok().map(|v| v * 1024 * 1024)
+            s[..s.len() - 2]
+                .parse::<u64>()
+                .ok()
+                .map(|v| v * 1024 * 1024)
         } else if s.ends_with("Ki") {
             s[..s.len() - 2].parse::<u64>().ok().map(|v| v * 1024)
         } else if s.ends_with('G') {
-            s[..s.len() - 1].parse::<u64>().ok().map(|v| v * 1024 * 1024 * 1024)
+            s[..s.len() - 1]
+                .parse::<u64>()
+                .ok()
+                .map(|v| v * 1024 * 1024 * 1024)
         } else if s.ends_with('M') {
-            s[..s.len() - 1].parse::<u64>().ok().map(|v| v * 1024 * 1024)
+            s[..s.len() - 1]
+                .parse::<u64>()
+                .ok()
+                .map(|v| v * 1024 * 1024)
         } else if s.ends_with('K') {
             s[..s.len() - 1].parse::<u64>().ok().map(|v| v * 1024)
         } else {
@@ -561,9 +573,9 @@ impl CrunEngine {
 
         info!("Pulling OCI image: {} → {}", image, rootfs_path.display());
 
-        let reference: Reference = image
-            .parse()
-            .map_err(|e| RuntimeError::InvalidManifest(format!("Invalid image reference: {}", e)))?;
+        let reference: Reference = image.parse().map_err(|e| {
+            RuntimeError::InvalidManifest(format!("Invalid image reference: {}", e))
+        })?;
 
         let client = Client::new(oci_distribution::client::ClientConfig {
             protocol: oci_distribution::client::ClientProtocol::Https,
@@ -571,25 +583,33 @@ impl CrunEngine {
         });
 
         let auth = RegistryAuth::Anonymous;
-        let (manifest, _digest) = client
-            .pull_manifest(&reference, &auth)
-            .await
-            .map_err(|e| RuntimeError::DeploymentFailed(format!("Failed to pull manifest: {}", e)))?;
+        let (manifest, _digest) = client.pull_manifest(&reference, &auth).await.map_err(|e| {
+            RuntimeError::DeploymentFailed(format!("Failed to pull manifest: {}", e))
+        })?;
 
         let layers = match manifest {
             oci_distribution::manifest::OciManifest::Image(img) => img.layers,
             oci_distribution::manifest::OciManifest::ImageIndex(idx) => {
                 if let Some(first) = idx.manifests.first() {
-                    let (inner, _) = client
-                        .pull_manifest(&reference, &auth)
-                        .await
-                        .map_err(|e| RuntimeError::DeploymentFailed(format!("Failed to pull platform manifest: {}", e)))?;
+                    let (inner, _) =
+                        client.pull_manifest(&reference, &auth).await.map_err(|e| {
+                            RuntimeError::DeploymentFailed(format!(
+                                "Failed to pull platform manifest: {}",
+                                e
+                            ))
+                        })?;
                     match inner {
                         oci_distribution::manifest::OciManifest::Image(img) => img.layers,
-                        _ => return Err(RuntimeError::DeploymentFailed("Unexpected manifest type".to_string())),
+                        _ => {
+                            return Err(RuntimeError::DeploymentFailed(
+                                "Unexpected manifest type".to_string(),
+                            ));
+                        }
                     }
                 } else {
-                    return Err(RuntimeError::DeploymentFailed("Empty image index".to_string()));
+                    return Err(RuntimeError::DeploymentFailed(
+                        "Empty image index".to_string(),
+                    ));
                 }
             }
         };
@@ -602,7 +622,9 @@ impl CrunEngine {
             client
                 .pull_blob(&reference, &layer, &mut layer_data)
                 .await
-                .map_err(|e| RuntimeError::DeploymentFailed(format!("Failed to pull layer: {}", e)))?;
+                .map_err(|e| {
+                    RuntimeError::DeploymentFailed(format!("Failed to pull layer: {}", e))
+                })?;
 
             if layer_data.len() > MAX_LAYER_SIZE {
                 let _ = std::fs::remove_dir_all(&bundle_path);
@@ -749,7 +771,11 @@ impl CrunEngine {
                     destination: "/proc".to_string(),
                     mount_type: "proc".to_string(),
                     source: "proc".to_string(),
-                    options: vec!["nosuid".to_string(), "noexec".to_string(), "nodev".to_string()],
+                    options: vec![
+                        "nosuid".to_string(),
+                        "noexec".to_string(),
+                        "nodev".to_string(),
+                    ],
                 },
                 OciMount {
                     destination: "/dev".to_string(),
@@ -777,17 +803,39 @@ impl CrunEngine {
                     destination: "/tmp".to_string(),
                     mount_type: "tmpfs".to_string(),
                     source: "tmpfs".to_string(),
-                    options: vec!["nosuid".to_string(), "nodev".to_string(), "size=64m".to_string()],
+                    options: vec![
+                        "nosuid".to_string(),
+                        "nodev".to_string(),
+                        "size=64m".to_string(),
+                    ],
                 },
             ],
             linux: OciLinux {
                 namespaces: vec![
-                    OciNamespace { ns_type: "pid".to_string(), path: None },
-                    OciNamespace { ns_type: "network".to_string(), path: None },
-                    OciNamespace { ns_type: "ipc".to_string(), path: None },
-                    OciNamespace { ns_type: "uts".to_string(), path: None },
-                    OciNamespace { ns_type: "mount".to_string(), path: None },
-                    OciNamespace { ns_type: "cgroup".to_string(), path: None },
+                    OciNamespace {
+                        ns_type: "pid".to_string(),
+                        path: None,
+                    },
+                    OciNamespace {
+                        ns_type: "network".to_string(),
+                        path: None,
+                    },
+                    OciNamespace {
+                        ns_type: "ipc".to_string(),
+                        path: None,
+                    },
+                    OciNamespace {
+                        ns_type: "uts".to_string(),
+                        path: None,
+                    },
+                    OciNamespace {
+                        ns_type: "mount".to_string(),
+                        path: None,
+                    },
+                    OciNamespace {
+                        ns_type: "cgroup".to_string(),
+                        path: None,
+                    },
                 ],
                 resources: OciResources {
                     memory: OciMemory {
@@ -825,8 +873,9 @@ impl CrunEngine {
     /// Writes the OCI spec to config.json.
     fn write_oci_spec(&self, bundle_path: &PathBuf, spec: &OciSpec) -> RuntimeResult<()> {
         let config_path = bundle_path.join("config.json");
-        let json = serde_json::to_string_pretty(spec)
-            .map_err(|e| RuntimeError::DeploymentFailed(format!("Failed to serialize OCI spec: {}", e)))?;
+        let json = serde_json::to_string_pretty(spec).map_err(|e| {
+            RuntimeError::DeploymentFailed(format!("Failed to serialize OCI spec: {}", e))
+        })?;
         std::fs::write(&config_path, json).map_err(RuntimeError::IoError)?;
         debug!("Wrote OCI spec to: {}", config_path.display());
         Ok(())
@@ -840,8 +889,9 @@ impl CrunEngine {
         info!("Starting container {} via libcrun FFI", container_id);
 
         let config_path = bundle_path.join("config.json");
-        let config_json = std::fs::read_to_string(&config_path)
-            .map_err(|e| RuntimeError::DeploymentFailed(format!("Failed to read config.json: {}", e)))?;
+        let config_json = std::fs::read_to_string(&config_path).map_err(|e| {
+            RuntimeError::DeploymentFailed(format!("Failed to read config.json: {}", e))
+        })?;
 
         let config_cstr = CString::new(config_json)
             .map_err(|e| RuntimeError::DeploymentFailed(format!("Invalid config.json: {}", e)))?;
@@ -862,10 +912,8 @@ impl CrunEngine {
             let mut err: crun_sys::libcrun_error_t = ptr::null_mut();
 
             // Load container from JSON
-            let container = crun_sys::libcrun_container_load_from_memory(
-                config_cstr.as_ptr(),
-                &mut err,
-            );
+            let container =
+                crun_sys::libcrun_container_load_from_memory(config_cstr.as_ptr(), &mut err);
 
             if container.is_null() {
                 let msg = if !err.is_null() {
@@ -904,9 +952,7 @@ impl CrunEngine {
 
             // Run container
             let ret = crun_sys::libcrun_container_run(
-                ctx,
-                container,
-                0, // No special options
+                ctx, container, 0, // No special options
                 &mut err,
             );
 
@@ -937,7 +983,9 @@ impl CrunEngine {
     /// Stub for non-Linux platforms.
     #[cfg(not(target_os = "linux"))]
     fn run_container_ffi(&self, _container_id: &str, _bundle_path: &PathBuf) -> RuntimeResult<u32> {
-        Err(RuntimeError::EngineNotAvailable("CrunEngine is Linux-only".to_string()))
+        Err(RuntimeError::EngineNotAvailable(
+            "CrunEngine is Linux-only".to_string(),
+        ))
     }
 
     /// Kills a container using libcrun FFI (Linux only).
@@ -1004,7 +1052,9 @@ impl CrunEngine {
     /// Stub for non-Linux platforms.
     #[cfg(not(target_os = "linux"))]
     fn kill_container_ffi(&self, _container_id: &str, _signal: &str) -> RuntimeResult<()> {
-        Err(RuntimeError::EngineNotAvailable("CrunEngine is Linux-only".to_string()))
+        Err(RuntimeError::EngineNotAvailable(
+            "CrunEngine is Linux-only".to_string(),
+        ))
     }
 
     /// Deletes a container using libcrun FFI (Linux only).
@@ -1067,7 +1117,9 @@ impl CrunEngine {
     /// Stub for non-Linux platforms.
     #[cfg(not(target_os = "linux"))]
     fn delete_container_ffi(&self, _container_id: &str) -> RuntimeResult<()> {
-        Err(RuntimeError::EngineNotAvailable("CrunEngine is Linux-only".to_string()))
+        Err(RuntimeError::EngineNotAvailable(
+            "CrunEngine is Linux-only".to_string(),
+        ))
     }
 }
 
@@ -1140,7 +1192,9 @@ impl RuntimeEngine for CrunEngine {
 
         let container_id = Uuid::new_v4().to_string();
 
-        let bundle_path = self.prepare_rootfs(&container_spec.image, &container_id).await?;
+        let bundle_path = self
+            .prepare_rootfs(&container_spec.image, &container_id)
+            .await?;
 
         let oci_spec = self.generate_oci_spec(
             &container_id,
@@ -1306,8 +1360,14 @@ impl RuntimeEngine for CrunEngine {
         }
 
         // libcrun doesn't have native log support - would need external log driver
-        debug!("Log retrieval for {} (libcrun has no native log support)", pod_id);
-        Ok(format!("[crun] Container {} - logs require external log driver\n", pod_id))
+        debug!(
+            "Log retrieval for {} (libcrun has no native log support)",
+            pod_id
+        );
+        Ok(format!(
+            "[crun] Container {} - logs require external log driver\n",
+            pod_id
+        ))
     }
 
     async fn validate(&self, manifest_content: &[u8]) -> RuntimeResult<()> {
@@ -1344,11 +1404,23 @@ mod tests {
 
     #[test]
     fn test_parse_memory_string() {
-        assert_eq!(CrunEngine::parse_memory_string("512Mi"), Some(512 * 1024 * 1024));
-        assert_eq!(CrunEngine::parse_memory_string("1Gi"), Some(1024 * 1024 * 1024));
+        assert_eq!(
+            CrunEngine::parse_memory_string("512Mi"),
+            Some(512 * 1024 * 1024)
+        );
+        assert_eq!(
+            CrunEngine::parse_memory_string("1Gi"),
+            Some(1024 * 1024 * 1024)
+        );
         assert_eq!(CrunEngine::parse_memory_string("256Ki"), Some(256 * 1024));
-        assert_eq!(CrunEngine::parse_memory_string("1G"), Some(1024 * 1024 * 1024));
-        assert_eq!(CrunEngine::parse_memory_string("512M"), Some(512 * 1024 * 1024));
+        assert_eq!(
+            CrunEngine::parse_memory_string("1G"),
+            Some(1024 * 1024 * 1024)
+        );
+        assert_eq!(
+            CrunEngine::parse_memory_string("512M"),
+            Some(512 * 1024 * 1024)
+        );
         assert_eq!(CrunEngine::parse_memory_string("1048576"), Some(1048576));
     }
 

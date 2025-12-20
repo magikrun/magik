@@ -181,7 +181,9 @@ pub async fn mark_disposal(resource_key: &str) {
     set.insert(resource_key.to_string(), expires_at);
     info!(
         "mark_disposal: resource_key={} expires_in={:?} (cache_size={})",
-        resource_key, DISPOSAL_TTL, set.len()
+        resource_key,
+        DISPOSAL_TTL,
+        set.len()
     );
 }
 
@@ -208,8 +210,7 @@ pub async fn handle_disposal(
     let resource_key = format!("{}/{}/{}", disposal.namespace, disposal.kind, disposal.name);
     info!(
         "handle_disposal: resource={} from={}",
-        resource_key,
-        source_peer_identity
+        resource_key, source_peer_identity
     );
 
     if !is_timestamp_fresh(disposal.timestamp) {
@@ -220,10 +221,15 @@ pub async fn handle_disposal(
         return Err("Stale timestamp".into());
     }
 
-
     mark_disposal(&resource_key).await;
 
-    match crate::runtime::delete_pods_by_resource(&disposal.namespace, &disposal.kind, &disposal.name).await {
+    match crate::runtime::delete_pods_by_resource(
+        &disposal.namespace,
+        &disposal.kind,
+        &disposal.name,
+    )
+    .await
+    {
         Ok(deleted) => {
             info!(
                 "handle_disposal: deleted {} pods for resource={}",
@@ -300,30 +306,17 @@ struct OwnedTenderContext {
 #[derive(Debug, Clone)]
 pub enum SchedulerCommand {
     /// Broadcast a message to the mesh fabric topic
-    Publish {
-        topic: String,
-        payload: Vec<u8>,
-    },
+    Publish { topic: String, payload: Vec<u8> },
 
     /// Send a bid directly to a specific peer
-    SendBid {
-        identity: String,
-        payload: Vec<u8>,
-    },
+    SendBid { identity: String, payload: Vec<u8> },
 
     /// Send an event directly to a specific peer
-    SendEvent {
-        identity: String,
-        payload: Vec<u8>,
-    },
+    SendEvent { identity: String, payload: Vec<u8> },
 
     /// Send an award with manifest to a bid winner
-    SendAward {
-        identity: String,
-        payload: Vec<u8>,
-    },
+    SendAward { identity: String, payload: Vec<u8> },
 }
-
 
 impl Scheduler {
     /// Creates a new scheduler instance.
@@ -332,10 +325,7 @@ impl Scheduler {
     ///
     /// * `local_node_id` - This node's hex-encoded identity
     /// * `outbound_tx` - Channel for sending commands to the network layer
-    pub fn new(
-        local_node_id: String,
-        outbound_tx: mpsc::Sender<SchedulerCommand>,
-    ) -> Self {
+    pub fn new(local_node_id: String, outbound_tx: mpsc::Sender<SchedulerCommand>) -> Self {
         Self {
             local_node_id,
             owned_tenders: Arc::new(Mutex::new(HashMap::new())),
@@ -351,12 +341,7 @@ impl Scheduler {
     /// Messages on the [`BEEMESH_FABRIC`] topic are parsed as either:
     /// - [`Tender`]: New workload announcement
     /// - [`Disposal`]: Workload deletion request
-    pub async fn handle_pubsub_message(
-        &self,
-        topic: &str,
-        from: &str,
-        data: &[u8],
-    ) {
+    pub async fn handle_pubsub_message(&self, topic: &str, from: &str, data: &[u8]) {
         if topic != BEEMESH_FABRIC {
             return;
         }
@@ -410,7 +395,6 @@ impl Scheduler {
             return;
         }
 
-
         let is_owner = source_identity == self.local_node_id;
         let manifest_json = if is_owner {
             get_local_manifest(&tender_id)
@@ -428,10 +412,7 @@ impl Scheduler {
                 return;
             }
 
-            self.initialize_owned_tender(
-                &tender_id,
-                manifest_json.clone(),
-            );
+            self.initialize_owned_tender(&tender_id, manifest_json.clone());
             info!(
                 "Local node issued tender {}; skipping bid as owner",
                 tender_id
@@ -481,7 +462,10 @@ impl Scheduler {
                 );
             }
             Err(mpsc::error::TrySendError::Closed(_)) => {
-                error!("Failed to queue bid for tender {}: channel closed", tender_id);
+                error!(
+                    "Failed to queue bid for tender {}: channel closed",
+                    tender_id
+                );
             }
         }
     }
@@ -492,11 +476,7 @@ impl Scheduler {
     /// 1. Waits for the selection window to close
     /// 2. Selects winners based on collected bids
     /// 3. Sends award messages with full manifest to winners
-    fn initialize_owned_tender(
-        &self,
-        tender_id: &str,
-        manifest_json: Option<String>,
-    ) {
+    fn initialize_owned_tender(&self, tender_id: &str, manifest_json: Option<String>) {
         {
             let mut owned = self
                 .owned_tenders
@@ -509,9 +489,7 @@ impl Scheduler {
             owned.insert(
                 tender_id.to_string(),
                 OwnedTenderContext {
-                    bid_context: BidContext {
-                        bids: Vec::new(),
-                    },
+                    bid_context: BidContext { bids: Vec::new() },
                     manifest_json,
                 },
             );
@@ -534,20 +512,14 @@ impl Scheduler {
                     .lock()
                     .expect("owned tenders mutex poisoned - bid collection state corrupted");
                 if let Some(ctx) = tenders.remove(&tender_id_clone) {
-                    (
-                        select_winners(&ctx.bid_context),
-                        ctx.manifest_json.clone(),
-                    )
+                    (select_winners(&ctx.bid_context), ctx.manifest_json.clone())
                 } else {
                     (Vec::new(), None)
                 }
             };
 
             if winners.is_empty() {
-                info!(
-                    "No qualifying bids for tender {}",
-                    tender_id_clone
-                );
+                info!("No qualifying bids for tender {}", tender_id_clone);
                 return;
             }
 
@@ -562,8 +534,7 @@ impl Scheduler {
                 tender_id_clone, summary
             );
 
-            let winners_list: Vec<String> =
-                winners.iter().map(|w| w.bidder_id.clone()).collect();
+            let winners_list: Vec<String> = winners.iter().map(|w| w.bidder_id.clone()).collect();
 
             if let Some(manifest_json) = manifest_json_opt
                 .clone()
@@ -579,8 +550,8 @@ impl Scheduler {
                         nonce: rand::thread_rng().next_u64(),
                     };
 
-                    let award_bytes = bincode::serialize(&award_with_manifest)
-                        .unwrap_or_else(|_| Vec::new());
+                    let award_bytes =
+                        bincode::serialize(&award_with_manifest).unwrap_or_else(|_| Vec::new());
 
                     match outbound_tx.try_send(SchedulerCommand::SendAward {
                         identity: winner.bidder_id.clone(),
@@ -688,7 +659,6 @@ impl Scheduler {
             return;
         }
 
-
         if !self.mark_bid_seen(bid) {
             info!(
                 "Ignoring replayed bid {} from {}",
@@ -778,7 +748,6 @@ impl Scheduler {
             return;
         }
 
-
         if !self.mark_event_seen(event) {
             info!(
                 "Ignoring replayed scheduler event for tender {} from {}",
@@ -795,12 +764,13 @@ impl Scheduler {
             && matches!(
                 event.event_type,
                 EventType::Cancelled | EventType::Preempted | EventType::Failed
-            ) {
-                info!(
-                    "Received termination event for locally deployed tender {}",
-                    tender_id
-                );
-            }
+            )
+        {
+            info!(
+                "Received termination event for locally deployed tender {}",
+                tender_id
+            );
+        }
     }
 
     /// Publishes a scheduler event to the tender owner.
@@ -816,10 +786,7 @@ impl Scheduler {
         let owner_identity = match get_tender_owner(tender_id) {
             Some(identity) => identity,
             None => {
-                info!(
-                    "Unknown tender owner for {}; cannot send event",
-                    tender_id
-                );
+                info!("Unknown tender owner for {}; cannot send event", tender_id);
                 return;
             }
         };
@@ -963,11 +930,7 @@ fn record_replay<K: Eq + Hash + Clone>(map: &mut HashMap<K, u64>, key: K) -> boo
     map.retain(|_, ts| now.saturating_sub(*ts) <= REPLAY_WINDOW_MS);
 
     while map.len() >= MAX_REPLAY_FILTER_ENTRIES {
-        if let Some(oldest_key) = map
-            .iter()
-            .min_by_key(|(_, ts)| *ts)
-            .map(|(k, _)| k.clone())
-        {
+        if let Some(oldest_key) = map.iter().min_by_key(|(_, ts)| *ts).map(|(k, _)| k.clone()) {
             map.remove(&oldest_key);
         } else {
             break;
@@ -975,9 +938,10 @@ fn record_replay<K: Eq + Hash + Clone>(map: &mut HashMap<K, u64>, key: K) -> boo
     }
 
     if let Some(ts) = map.get(&key)
-        && now.saturating_sub(*ts) <= REPLAY_WINDOW_MS {
-            return false;
-        }
+        && now.saturating_sub(*ts) <= REPLAY_WINDOW_MS
+    {
+        return false;
+    }
 
     map.insert(key, now);
     true

@@ -213,9 +213,7 @@ pub async fn initialize_runtime() -> Result<(), Box<dyn std::error::Error>> {
     let crun_available = *available_engines.get("crun").unwrap_or(&false);
 
     if !krun_available && !crun_available {
-        return Err(
-            "No runtime engines available. Install libkrun (recommended) or crun.".into()
-        );
+        return Err("No runtime engines available. Install libkrun (recommended) or crun.".into());
     }
 
     if krun_available {
@@ -300,45 +298,58 @@ pub async fn process_manifest_deployment(
             "Manifest size {} exceeds maximum allowed size {}",
             manifest_content.len(),
             MAX_MANIFEST_SIZE
-        ).into());
+        )
+        .into());
     }
 
     let manifest_str = String::from_utf8_lossy(&manifest_content);
-    let (namespace, kind, name, runtime_engine) = if let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&manifest_str) {
-        let ns = doc.get("metadata")
-            .and_then(|m| m.get("namespace"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("default");
-        let k = doc.get("kind")
-            .and_then(|k| k.as_str())
-            .unwrap_or("Pod");
-        let n = doc.get("metadata")
-            .and_then(|m| m.get("name"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("unknown");
+    let (namespace, kind, name, runtime_engine) =
+        if let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(&manifest_str) {
+            let ns = doc
+                .get("metadata")
+                .and_then(|m| m.get("namespace"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("default");
+            let k = doc.get("kind").and_then(|k| k.as_str()).unwrap_or("Pod");
+            let n = doc
+                .get("metadata")
+                .and_then(|m| m.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("unknown");
 
-        // Extract runtime annotation
-        let rt = doc.get("metadata")
-            .and_then(|m| m.get("annotations"))
-            .and_then(|a| a.get(RUNTIME_ANNOTATION_KEY))
-            .and_then(|r| r.as_str())
-            .unwrap_or(DEFAULT_RUNTIME);
+            // Extract runtime annotation
+            let rt = doc
+                .get("metadata")
+                .and_then(|m| m.get("annotations"))
+                .and_then(|a| a.get(RUNTIME_ANNOTATION_KEY))
+                .and_then(|r| r.as_str())
+                .unwrap_or(DEFAULT_RUNTIME);
 
-        // Validate runtime selection
-        let validated_rt = if VALID_RUNTIMES.contains(&rt) {
-            rt
+            // Validate runtime selection
+            let validated_rt = if VALID_RUNTIMES.contains(&rt) {
+                rt
+            } else {
+                warn!(
+                    "Invalid runtime '{}' in annotation, falling back to '{}'",
+                    rt, DEFAULT_RUNTIME
+                );
+                DEFAULT_RUNTIME
+            };
+
+            (
+                ns.to_string(),
+                k.to_string(),
+                n.to_string(),
+                validated_rt.to_string(),
+            )
         } else {
-            warn!(
-                "Invalid runtime '{}' in annotation, falling back to '{}'",
-                rt, DEFAULT_RUNTIME
-            );
-            DEFAULT_RUNTIME
+            (
+                "default".to_string(),
+                "Pod".to_string(),
+                "unknown".to_string(),
+                DEFAULT_RUNTIME.to_string(),
+            )
         };
-
-        (ns.to_string(), k.to_string(), n.to_string(), validated_rt.to_string())
-    } else {
-        ("default".to_string(), "Pod".to_string(), "unknown".to_string(), DEFAULT_RUNTIME.to_string())
-    };
 
     info!(
         "Processing manifest deployment for {}/{}/{} using {} engine",
@@ -353,9 +364,8 @@ pub async fn process_manifest_deployment(
         .as_ref()
         .ok_or("Runtime registry not initialized")?;
 
-    let engine = registry
-        .get_engine(&runtime_engine)
-        .ok_or_else(|| format!(
+    let engine = registry.get_engine(&runtime_engine).ok_or_else(|| {
+        format!(
             "{} engine not available. {}",
             runtime_engine,
             if runtime_engine == "krun" {
@@ -363,7 +373,8 @@ pub async fn process_manifest_deployment(
             } else {
                 "Install crun: https://github.com/containers/crun"
             }
-        ))?;
+        )
+    })?;
 
     let pod_info = engine
         .apply(&modified_manifest_content, &deployment_config)
@@ -394,14 +405,14 @@ fn modify_manifest_replicas(
                     serde_yaml::Value::Number(serde_yaml::Number::from(1)),
                 );
             }
+        } else if doc.get("replicas").is_some()
+            && let Some(doc_map) = doc.as_mapping_mut()
+        {
+            doc_map.insert(
+                serde_yaml::Value::String("replicas".to_string()),
+                serde_yaml::Value::Number(serde_yaml::Number::from(1)),
+            );
         }
-        else if doc.get("replicas").is_some()
-            && let Some(doc_map) = doc.as_mapping_mut() {
-                doc_map.insert(
-                    serde_yaml::Value::String("replicas".to_string()),
-                    serde_yaml::Value::Number(serde_yaml::Number::from(1)),
-                );
-            }
 
         let modified_yaml = serde_yaml::to_string(&doc)?;
         info!("Modified manifest to set replicas=1 for single-node deployment");
@@ -498,7 +509,11 @@ fn extract_workload_metadata(manifest_json: &str) -> (String, String, String) {
             .to_string();
         (namespace, kind, name)
     } else {
-        ("default".to_string(), "Pod".to_string(), "unknown".to_string())
+        (
+            "default".to_string(),
+            "Pod".to_string(),
+            "unknown".to_string(),
+        )
     }
 }
 
@@ -666,7 +681,10 @@ pub async fn delete_pod(pod_id: &str) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 /// Gets logs from a pod.
-pub async fn get_pod_logs(pod_id: &str, tail: Option<usize>) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn get_pod_logs(
+    pod_id: &str,
+    tail: Option<usize>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let registry_guard = RUNTIME_REGISTRY.read().await;
     let registry = registry_guard
         .as_ref()

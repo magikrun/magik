@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use machineplane::runtimes::{create_default_registry, PodStatus, RuntimeEngine};
+use machineplane::runtimes::{PodStatus, RuntimeEngine, create_default_registry};
 
 #[path = "apply_common.rs"]
 mod apply_common;
@@ -26,8 +26,8 @@ mod kube_helpers;
 mod runtime_helpers;
 
 use apply_common::{
-    check_instance_deployment, get_node_identities, setup_test_environment,
-    start_fabric_nodes, wait_for_mesh_formation, TEST_PORTS,
+    TEST_PORTS, check_instance_deployment, get_node_identities, setup_test_environment,
+    start_fabric_nodes, wait_for_mesh_formation,
 };
 use kube_helpers::{apply_manifest_via_kube_api, delete_manifest_via_kube_api};
 use runtime_helpers::shutdown_nodes;
@@ -73,7 +73,7 @@ fn is_vm_deployment_supported() -> bool {
                     m.mode() & 0o006 != 0 || unsafe { libc::geteuid() } == 0
                 })
                 .unwrap_or(false);
-        
+
         if !kvm_available {
             log::info!("KVM not accessible - full VM tests will be skipped");
         }
@@ -281,15 +281,15 @@ async fn cleanup_all_magik_pods() {
                             log::info!("Removed Magik pod: {}", pod.name);
                             removed_count += 1;
                         }
-                        Err(err) => log::warn!(
-                            "Failed to remove Magik pod {}: {}",
-                            pod.name,
-                            err
-                        ),
+                        Err(err) => log::warn!("Failed to remove Magik pod {}: {}", pod.name, err),
                     }
                 }
             }
-            log::info!("Cleaned up {} Magik pods via {}", removed_count, engine.name());
+            log::info!(
+                "Cleaned up {} Magik pods via {}",
+                removed_count,
+                engine.name()
+            );
         }
         Err(err) => {
             log::warn!("Failed to list pods for cleanup: {}", err);
@@ -408,11 +408,11 @@ async fn apply_deploys_manifest_to_mesh() {
             "  Nodes with deployment attempts: {} (VM launch not supported on this platform)",
             nodes_with_deployed_instances.len()
         );
-        
+
         // Clean up and return success - scheduling was verified
         shutdown_nodes(&mut handles).await;
         cleanup_all_magik_pods().await;
-        
+
         println!(">>> Test passed: Scheduling protocol verified on macOS");
         return;
     }
@@ -444,7 +444,10 @@ async fn apply_deploys_manifest_to_mesh() {
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(0);
     if observe_secs > 0 {
-        log::info!("Pausing {} seconds to observe pods before cleanup...", observe_secs);
+        log::info!(
+            "Pausing {} seconds to observe pods before cleanup...",
+            observe_secs
+        );
         sleep(Duration::from_secs(observe_secs)).await;
     }
 
@@ -573,12 +576,8 @@ async fn apply_with_runtime_creates_and_removes_workloads() {
     // Delete the manifest and verify cleanup
     let _ = delete_manifest_via_kube_api(&client, ports[0], &manifest_path, true).await;
     let runtime_teardown_timeout = timeout_from_env("MAGIK_RUNTIME_TEARDOWN_TIMEOUT_SECS", 30);
-    let runtime_verification_successful = wait_for_runtime_state(
-        resource_name,
-        false,
-        runtime_teardown_timeout,
-    )
-    .await;
+    let runtime_verification_successful =
+        wait_for_runtime_state(resource_name, false, runtime_teardown_timeout).await;
 
     assert!(
         !runtime_verification_successful,

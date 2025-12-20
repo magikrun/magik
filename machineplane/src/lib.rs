@@ -175,7 +175,9 @@ pub async fn start_machineplane(
     let dht_refresh_interval = cli.dht_refresh_interval_secs;
     let korium_handle = tokio::spawn(async move {
         let _keeper = control_tx_for_korium;
-        if let Err(e) = network::start_korium_node(node, peer_tx, control_rx, dht_refresh_interval).await {
+        if let Err(e) =
+            network::start_korium_node(node, peer_tx, control_rx, dht_refresh_interval).await
+        {
             log::error!("Korium node error: {}", e);
         }
     });

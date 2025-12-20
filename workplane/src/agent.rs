@@ -45,9 +45,11 @@ use tracing::{debug, info, warn};
 use crate::config::Config;
 use crate::discovery::ServiceRecord;
 use crate::network::Network;
-use crate::raft::{Heartbeat, LeadershipUpdate, RaftAction, RaftManager, RaftRole, VoteRequest, VoteResponse};
-use crate::selfheal::SelfHealer;
+use crate::raft::{
+    Heartbeat, LeadershipUpdate, RaftAction, RaftManager, RaftRole, VoteRequest, VoteResponse,
+};
 use crate::rpc::{RPCRequest, RPCResponse, register_stream_handler};
+use crate::selfheal::SelfHealer;
 
 /// A workplane agent instance.
 ///
@@ -245,7 +247,6 @@ impl Agent {
     }
 }
 
-
 struct LeaderMonitor {
     stop_tx: watch::Sender<bool>,
     handle: JoinHandle<()>,
@@ -259,16 +260,16 @@ impl LeaderMonitor {
         leader_state: Arc<RwLock<Option<String>>>,
     ) -> Self {
         let (tx, mut rx) = watch::channel(false);
-        
+
         let raft_tick_interval = Duration::from_millis(50);
         let discovery_interval = cfg.replica_check_interval;
-        
+
         let handle = tokio::spawn(async move {
             let mut raft_ticker = interval(raft_tick_interval);
             let mut discovery_ticker = interval(discovery_interval);
             raft_ticker.tick().await; // Skip first tick
             discovery_ticker.tick().await;
-            
+
             loop {
                 select! {
                     _ = raft_ticker.tick() => {
@@ -276,7 +277,7 @@ impl LeaderMonitor {
                             let mut guard = raft.write().expect("raft lock");
                             guard.tick()
                         };
-                        
+
                         for action in actions {
                             match action {
                                 RaftAction::SendHeartbeat(hb) => {
@@ -295,7 +296,7 @@ impl LeaderMonitor {
                             }
                         }
                     }
-                    
+
                     _ = discovery_ticker.tick() => {
                         let records = network.find_service_peers();
                         let relevant: std::collections::HashSet<String> = records
@@ -308,7 +309,7 @@ impl LeaderMonitor {
                             guard.update_peers(relevant);
                         }
                     }
-                    
+
                     changed = rx.changed() => {
                         if changed.is_ok() && *rx.borrow() {
                             break;
@@ -323,14 +324,14 @@ impl LeaderMonitor {
             handle,
         }
     }
-    
+
     async fn broadcast_heartbeat(network: &Network, cfg: &Config, heartbeat: &Heartbeat) {
         let records = network.find_service_peers();
         let peers: Vec<_> = records
             .into_iter()
             .filter(|r| r.workload_id == cfg.workload_id() && r.peer_id != heartbeat.leader_id)
             .collect();
-        
+
         for peer in peers {
             let body = match serde_json::to_value(heartbeat) {
                 Ok(Value::Object(map)) => map,
@@ -341,13 +342,13 @@ impl LeaderMonitor {
                 leader_only: false,
                 body,
             };
-            
+
             if let Err(e) = network.send_request(&peer.peer_id, req).await {
                 debug!(peer = %peer.peer_id, error = %e, "failed to send heartbeat");
             }
         }
     }
-    
+
     async fn request_votes(
         network: &Network,
         cfg: &Config,
@@ -358,9 +359,11 @@ impl LeaderMonitor {
         let records = network.find_service_peers();
         let peers: Vec<_> = records
             .into_iter()
-            .filter(|r| r.workload_id == cfg.workload_id() && r.peer_id != vote_request.candidate_id)
+            .filter(|r| {
+                r.workload_id == cfg.workload_id() && r.peer_id != vote_request.candidate_id
+            })
             .collect();
-        
+
         for peer in peers {
             let body = match serde_json::to_value(&vote_request) {
                 Ok(Value::Object(map)) => map,
@@ -371,17 +374,17 @@ impl LeaderMonitor {
                 leader_only: false,
                 body,
             };
-            
+
             match network.send_request(&peer.peer_id, req).await {
                 Ok(resp) if resp.ok => {
-                    if let Ok(vote_resp) = serde_json::from_value::<VoteResponse>(
-                        serde_json::Value::Object(resp.body)
-                    ) {
+                    if let Ok(vote_resp) =
+                        serde_json::from_value::<VoteResponse>(serde_json::Value::Object(resp.body))
+                    {
                         let actions = {
                             let mut guard = raft.write().expect("raft lock");
                             guard.handle_vote_response(vote_resp)
                         };
-                        
+
                         for action in actions {
                             if let RaftAction::LeadershipChanged(update) = action {
                                 {
@@ -420,8 +423,7 @@ impl LeaderMonitor {
                     warn!(error = %err, "failed to withdraw leader endpoint");
                 }
             }
-            RaftRole::Detached => {
-            }
+            RaftRole::Detached => {}
         }
     }
 }

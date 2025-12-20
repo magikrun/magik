@@ -46,8 +46,5 @@ fn content_hashing_is_deterministic() {
     assert_eq!(hash, compute_content_hash(manifest));
 
     let different_manifest = br#"{"apiVersion":"v1","kind":"Pod","metadata":{"name":"other"}}"#;
-    assert_ne!(
-        hash,
-        compute_content_hash(different_manifest)
-    );
+    assert_ne!(hash, compute_content_hash(different_manifest));
 }

@@ -120,13 +120,16 @@ impl Network {
             return Err(anyhow!("config: workload name and pod name are required"));
         }
 
-        let listen_addr = cfg.listen_addrs.first()
+        let listen_addr = cfg
+            .listen_addrs
+            .first()
             .map(|s| s.as_str())
             .unwrap_or("0.0.0.0:0");
-        
-        let node = Node::bind(listen_addr).await
+
+        let node = Node::bind(listen_addr)
+            .await
             .context("failed to bind Korium node")?;
-        
+
         let identity = node.identity();
 
         let mut caps = serde_json::Map::new();
@@ -164,11 +167,14 @@ impl Network {
 
         // Subscribe to workload-specific Gossipsub topic for peer discovery
         let workload_topic = format!("workplane/{}", cfg.workload_id());
-        node.subscribe(&workload_topic).await
+        node.subscribe(&workload_topic)
+            .await
             .context("failed to subscribe to workload topic")?;
-        
+
         // Get Gossipsub message receiver for peer announcements
-        let mut gossip_rx = node.messages().await
+        let mut gossip_rx = node
+            .messages()
+            .await
             .context("failed to get gossipsub message receiver")?;
         let dht_ttl = cfg.dht_ttl;
         tokio::spawn(async move {
@@ -206,9 +212,11 @@ impl Network {
         });
 
         // Get request-response RPC receiver for direct peer communication
-        let mut rpc_rx = node.incoming_requests().await
+        let mut rpc_rx = node
+            .incoming_requests()
+            .await
             .context("failed to get RPC request receiver")?;
-        
+
         let (rpc_tx, direct_rx) = mpsc::channel::<(String, Vec<u8>, oneshot::Sender<Vec<u8>>)>(256);
         tokio::spawn(async move {
             while let Some((from, data, reply_tx)) = rpc_rx.recv().await {
@@ -223,7 +231,13 @@ impl Network {
 
         let identity_clone = identity.clone();
         let workload_topic_clone = workload_topic.clone();
-        tokio::spawn(network_event_loop(node, cmd_rx, identity_clone, direct_rx, workload_topic_clone));
+        tokio::spawn(network_event_loop(
+            node,
+            cmd_rx,
+            identity_clone,
+            direct_rx,
+            workload_topic_clone,
+        ));
 
         Ok(Self {
             inner: Arc::new(NetworkInner {
@@ -240,12 +254,10 @@ impl Network {
     pub fn start(&self) {
         for peer_str in &self.inner.cfg.bootstrap_peer_strings {
             let (tx, _rx) = oneshot::channel();
-            let _ = self
-                .cmd_tx
-                .try_send(NetworkCommand::Dial { 
-                    addr: peer_str.clone(), 
-                    reply_tx: tx,
-                });
+            let _ = self.cmd_tx.try_send(NetworkCommand::Dial {
+                addr: peer_str.clone(),
+                reply_tx: tx,
+            });
         }
 
         if let Err(err) = self.refresh_heartbeat() {
@@ -433,7 +445,6 @@ impl Network {
     }
 }
 
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct RpcMessage {
     request_id: String,
@@ -472,7 +483,7 @@ async fn network_event_loop(
                         match msg.payload {
                             RpcPayload::Request(request) => {
                                 let response = crate::rpc::handle_request(&source_identity, request).await;
-                                
+
                                 let response_msg = RpcMessage {
                                     request_id: msg.request_id,
                                     payload: RpcPayload::Response(response),
@@ -585,7 +596,6 @@ async fn network_event_loop(
     }
 }
 
-
 impl PolicyEngine {
     fn from_config(cfg: &Config) -> Self {
         Self {
@@ -613,7 +623,6 @@ impl PolicyEngine {
         self.allowed.contains(&workload_id)
     }
 }
-
 
 fn current_millis() -> i64 {
     let now = std::time::SystemTime::now()

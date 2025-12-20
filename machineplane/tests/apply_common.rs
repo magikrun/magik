@@ -14,8 +14,12 @@ mod runtime_helpers;
 use runtime_helpers::{make_test_daemon, start_nodes, wait_for_local_multiaddr};
 use tokio::task::JoinHandle;
 
-pub const TEST_PORTS: [u16; 7] = [3000u16, 3100u16, 3200u16, 3300u16, 3400u16, 3500u16, 3600u16];
-pub const TEST_CORIUM_PORTS: [u16; 7] = [4000u16, 4100u16, 4200u16, 4300u16, 4400u16, 4500u16, 4600u16];
+pub const TEST_PORTS: [u16; 7] = [
+    3000u16, 3100u16, 3200u16, 3300u16, 3400u16, 3500u16, 3600u16,
+];
+pub const TEST_CORIUM_PORTS: [u16; 7] = [
+    4000u16, 4100u16, 4200u16, 4300u16, 4400u16, 4500u16, 4600u16,
+];
 
 /// Prepare logging and environment for runtime tests.
 pub async fn setup_test_environment() -> (reqwest::Client, Vec<u16>) {
@@ -84,7 +88,10 @@ pub async fn start_fabric_nodes_with_ports(
 }
 
 /// Fetch node identities for provided REST API ports.
-pub async fn get_node_identities(client: &reqwest::Client, ports: &[u16]) -> StdHashMap<u16, String> {
+pub async fn get_node_identities(
+    client: &reqwest::Client,
+    ports: &[u16],
+) -> StdHashMap<u16, String> {
     let identity_tasks = ports.iter().copied().map(|port| {
         let client = client.clone();
         async move {
@@ -96,7 +103,8 @@ pub async fn get_node_identities(client: &reqwest::Client, ports: &[u16]) -> Std
             {
                 Ok(resp) => match resp.json::<serde_json::Value>().await {
                     Ok(json) if json.get("ok").and_then(|v| v.as_bool()) == Some(true) => {
-                        if let Some(identity) = json.get("local_identity").and_then(|v| v.as_str()) {
+                        if let Some(identity) = json.get("local_identity").and_then(|v| v.as_str())
+                        {
                             return (port, Some(identity.to_string()));
                         }
                     }
@@ -184,7 +192,7 @@ pub async fn check_instance_deployment(
             let _port_to_identity = port_to_identity.clone();
             async move {
                 let base = format!("http://127.0.0.1:{}", port);
-                
+
                 // Use /debug/pods endpoint which queries local runtime directly
                 // This is stateless - no cross-node state tracking required
                 let pods_resp = client
@@ -226,7 +234,7 @@ pub async fn check_instance_deployment(
                                             .get("name")
                                             .or_else(|| metadata.get("app.kubernetes.io/name"))
                                             .and_then(|v| v.as_str());
-                                        
+
                                         if app_name == Some("my-nginx") {
                                             // Check pod status first - only verify manifest for Running pods
                                             let is_running = pod_info
@@ -234,7 +242,7 @@ pub async fn check_instance_deployment(
                                                 .and_then(|v| v.as_str())
                                                 .map(|s| s == "Running")
                                                 .unwrap_or(false);
-                                            
+
                                             // If not running, treat as "not yet deployed" to keep waiting
                                             if !is_running {
                                                 log::info!(
@@ -243,7 +251,7 @@ pub async fn check_instance_deployment(
                                                 );
                                                 continue;
                                             }
-                                            
+
                                             // Found pod by app name - verify exported manifest
                                             // is valid K8s YAML (has apiVersion and kind)
                                             // Note: Pod name may differ from app name due to pod_id
