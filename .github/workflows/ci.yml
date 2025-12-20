@@ -108,8 +108,8 @@ jobs:
             https://github.com/containers/libkrun.git /tmp/libkrun
           cd /tmp/libkrun
           
-          # Build libkrun (uses Cargo)
-          make
+          # Build libkrun (allow warnings - libkrun code uses older Rust patterns)
+          RUSTFLAGS="-A warnings" make
           sudo make install
           
           # Update library cache
