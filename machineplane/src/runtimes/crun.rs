@@ -121,6 +121,10 @@ const MAX_ROOTFS_SIZE: u64 = 4 * 1024 * 1024 * 1024;
 /// Directory for storing container bundles.
 const BUNDLE_BASE_DIR: &str = "/var/lib/magik/bundles";
 
+/// Directory for storing container state (Linux only).
+#[cfg(target_os = "linux")]
+const STATE_DIR: &str = "/var/run/magik/crun";
+
 /// Label keys for metadata.
 const POD_ID_LABEL_KEY: &str = "magik.io/pod-id";
 const NAMESPACE_LABEL_KEY: &str = "magik.io/namespace";
