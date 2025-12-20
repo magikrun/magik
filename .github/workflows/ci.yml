@@ -1,0 +1,245 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  LIBKRUN_VERSION: "1.16.0"
+  LIBKRUNFW_VERSION: "4.10.0"
+  LIBCRUN_VERSION: "1.19.1"
+
+jobs:
+  # Linux: Full build and test with libkrun + libcrun
+  linux:
+    name: Linux (with libkrun + libcrun)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkgconf \
+            autoconf \
+            automake \
+            libtool \
+            make \
+            gcc \
+            git \
+            python3 \
+            patchelf \
+            musl-tools \
+            libseccomp-dev \
+            libcap-dev \
+            libyajl-dev \
+            llvm-dev \
+            libclang-dev \
+            clang
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: x86_64-unknown-linux-musl
+
+      # === libkrunfw (bundled kernel for libkrun) ===
+      - name: Cache libkrunfw
+        id: cache-libkrunfw
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/libkrunfw*
+          key: libkrunfw-ubuntu-${{ env.LIBKRUNFW_VERSION }}-v1
+
+      - name: Install libkrunfw
+        if: steps.cache-libkrunfw.outputs.cache-hit != 'true'
+        run: |
+          # Download pre-built libkrunfw from GitHub releases
+          curl -L -o libkrunfw.tar.gz \
+            "https://github.com/containers/libkrunfw/releases/download/v${{ env.LIBKRUNFW_VERSION }}/libkrunfw-${{ env.LIBKRUNFW_VERSION }}-x86_64.tar.gz"
+          sudo tar -xzf libkrunfw.tar.gz -C /usr/local/lib --strip-components=1
+          sudo ldconfig
+
+      # === libkrun (microVM library) ===
+      - name: Cache libkrun
+        id: cache-libkrun
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/lib/libkrun*
+            /usr/local/include/libkrun.h
+            /usr/local/lib/pkgconfig/libkrun.pc
+          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v2
+
+      - name: Build libkrun
+        if: steps.cache-libkrun.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
+            https://github.com/containers/libkrun.git /tmp/libkrun
+          cd /tmp/libkrun
+          
+          make
+          sudo make install
+          sudo ldconfig
+
+      # === libcrun (OCI container runtime) ===
+      - name: Cache libcrun
+        id: cache-libcrun
+        uses: actions/cache@v4
+        with:
+          path: /usr/local
+          key: libcrun-ubuntu-${{ env.LIBCRUN_VERSION }}-v5
+
+      - name: Build libcrun
+        if: steps.cache-libcrun.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.LIBCRUN_VERSION }} \
+            https://github.com/containers/crun.git /tmp/crun
+          cd /tmp/crun
+          
+          ./autogen.sh
+          ./configure \
+            --prefix=/usr/local \
+            --disable-systemd
+          
+          make -j$(nproc)
+          sudo make install
+          
+          # Manually create pkgconfig file (crun doesn't provide one)
+          sudo mkdir -p /usr/local/lib/pkgconfig
+          sudo tee /usr/local/lib/pkgconfig/libcrun.pc << 'EOF'
+          prefix=/usr/local
+          exec_prefix=${prefix}
+          libdir=${exec_prefix}/lib
+          includedir=${prefix}/include
+          
+          Name: libcrun
+          Description: OCI runtime library
+          Version: ${{ env.LIBCRUN_VERSION }}
+          Libs: -L${libdir} -lcrun -lyajl -lseccomp -lcap
+          Cflags: -I${includedir}
+          EOF
+          
+          # Install headers
+          sudo mkdir -p /usr/local/include/libcrun
+          sudo mkdir -p /usr/local/include/ocispec
+          sudo cp src/libcrun/*.h /usr/local/include/libcrun/
+          sudo cp config.h /usr/local/include/
+          # Copy ocispec headers (generated during build)
+          find libocispec -name "*.h" -exec sudo cp {} /usr/local/include/ocispec/ \;
+
+      - name: Verify library installations
+        run: |
+          echo "=== libkrun ==="
+          ls -la /usr/local/lib/libkrun* || true
+          echo "=== libkrunfw ==="
+          ls -la /usr/local/lib/libkrunfw* || true
+          echo "=== libcrun ==="
+          ls -la /usr/local/lib/libcrun* || true
+          pkg-config --modversion libcrun || true
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+
+      - name: Build workplane for musl (for embedding)
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: cargo build -p workplane --release --target x86_64-unknown-linux-musl
+
+      - name: Build workspace
+        run: cargo build --workspace --all-targets
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib
+          LIBRARY_PATH: /usr/local/lib
+
+      - name: Run tests
+        run: cargo test --workspace
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib
+          MAGIK_SELECTION_WINDOW_MS: "1000"
+          MAGIK_GOSSIP_SETTLE_MS: "5000"
+          MAGIK_APPLY_MESH_TIMEOUT_SECS: "60"
+
+      - name: Build release
+        run: cargo build --release --workspace
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib
+          LIBRARY_PATH: /usr/local/lib
+
+  # macOS: Build with libkrun from Homebrew (stubs for crun)
+  macos:
+    name: macOS (with libkrun)
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew tap slp/krun
+          brew install slp/krun/libkrun slp/krun/libkrunfw llvm
+          
+          # Create libkrunfw version symlink (libkrun expects v5, brew installs v4)
+          sudo ln -sf /opt/homebrew/lib/libkrunfw.4.dylib /opt/homebrew/lib/libkrunfw.5.dylib
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-unknown-linux-musl
+
+      - name: Install musl cross-compiler
+        run: brew install FiloSottile/musl-cross/musl-cross
+
+      - name: Build workplane for musl (for embedding)
+        run: cargo build -p workplane --release --target aarch64-unknown-linux-musl
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
+
+      - name: Build workspace
+        run: cargo build --workspace --all-targets
+        env:
+          LIBCLANG_PATH: /opt/homebrew/opt/llvm/lib
+          LIBRARY_PATH: /opt/homebrew/lib
+          DYLD_LIBRARY_PATH: /opt/homebrew/lib
+
+      - name: Run tests (without VM - no HVF in CI runners)
+        run: cargo test --workspace
+        env:
+          LIBCLANG_PATH: /opt/homebrew/opt/llvm/lib
+          DYLD_LIBRARY_PATH: /opt/homebrew/lib
+          MAGIK_SELECTION_WINDOW_MS: "1000"
+          MAGIK_GOSSIP_SETTLE_MS: "5000"
+          MAGIK_APPLY_MESH_TIMEOUT_SECS: "60"
+
+  # Formatting and lints
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install LLVM/Clang for bindgen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-dev libclang-dev clang
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      # Clippy runs with stubs (no libkrun/libcrun needed for lint)
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
