@@ -32,6 +32,7 @@ jobs:
             gcc \
             git \
             python3 \
+            jq \
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
@@ -94,19 +95,37 @@ jobs:
           # Copy ocispec headers (generated during build)
           find libocispec -name "*.h" -exec sudo cp {} /usr/local/include/ocispec/ \;
 
+      - name: Install libkrunfw from prebuilt release
+        run: |
+          # Download the latest prebuilt libkrunfw (required by libkrun)
+          LIBKRUNFW_TAG=$(curl -sL https://api.github.com/repos/containers/libkrunfw/releases/latest | jq -r .tag_name)
+          echo "Installing libkrunfw ${LIBKRUNFW_TAG}"
+          curl -L -o /tmp/libkrunfw-x86_64.tgz \
+            "https://github.com/containers/libkrunfw/releases/download/${LIBKRUNFW_TAG}/libkrunfw-x86_64.tgz"
+          mkdir -p /tmp/libkrunfw-extract
+          tar xf /tmp/libkrunfw-x86_64.tgz -C /tmp/libkrunfw-extract
+          sudo mv /tmp/libkrunfw-extract/lib64/* /usr/local/lib/
+          sudo ldconfig
+
       - name: Cache libkrun build
         id: cache-libkrun
         uses: actions/cache@v4
         with:
           path: /usr/local
-          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v1
+          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v2
 
       - name: Build libkrun
         if: steps.cache-libkrun.outputs.cache-hit != 'true'
         run: |
+          # Install additional build dependencies for libkrun
+          sudo apt-get install -y patchelf libc6-dev
+          
           git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
             https://github.com/containers/libkrun.git /tmp/libkrun
           cd /tmp/libkrun
+          
+          # Create fake init binary (not needed for library build)
+          mkdir -p init && touch init/init
           
           # Build libkrun (allow warnings - libkrun code uses older Rust patterns)
           RUSTFLAGS="-A warnings" make
