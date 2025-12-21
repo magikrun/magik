@@ -12,7 +12,9 @@ env:
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
   # LLVM 14 is the default on Ubuntu 22.04 (ubuntu-latest)
+  # clang-sys uses these to find libclang for bindgen
   LIBCLANG_PATH: /usr/lib/llvm-14/lib
+  LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -38,6 +40,7 @@ jobs:
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
+            llvm-14 \
             llvm-14-dev \
             libclang-14-dev \
             clang-14 \
@@ -46,14 +49,24 @@ jobs:
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Verify and symlink libclang for bindgen/clang-sys
-          echo "=== Checking LLVM 14 installation ==="
+          # Debug: show what libclang files exist
+          echo "=== LLVM 14 lib directory ==="
           ls -la /usr/lib/llvm-14/lib/libclang* || true
           
-          # Create symlinks in standard library path so clang-sys can find it
-          sudo ln -sf /usr/lib/llvm-14/lib/libclang.so.14 /usr/lib/libclang.so
-          sudo ln -sf /usr/lib/llvm-14/lib/libclang.so.14 /usr/lib/libclang.so.1
-          sudo ldconfig
+          # clang-sys searches for libclang.so in LIBCLANG_PATH
+          # Ensure libclang.so symlink exists (not just libclang.so.14)
+          if [ -f /usr/lib/llvm-14/lib/libclang.so.14 ] && [ ! -f /usr/lib/llvm-14/lib/libclang.so ]; then
+            sudo ln -sf /usr/lib/llvm-14/lib/libclang.so.14 /usr/lib/llvm-14/lib/libclang.so
+          fi
+          
+          # Verify llvm-config is available
+          echo "=== llvm-config-14 ==="
+          /usr/bin/llvm-config-14 --version || true
+          /usr/bin/llvm-config-14 --libdir || true
+          
+          # Show final state
+          echo "=== Final libclang files ==="
+          ls -la /usr/lib/llvm-14/lib/libclang* || true
             
 
       - name: Set up Rust toolchain
