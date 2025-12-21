@@ -36,37 +36,43 @@ jobs:
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
+            llvm \
             libclang-dev \
             libvirglrenderer-dev \
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Find and export LLVM libdir for clang-sys/bindgen
-          if command -v llvm-config >/dev/null 2>&1; then
-            LLVM_LIBDIR=$(llvm-config --libdir)
-          else
-            # Fallback for Ubuntu 24.04 / LLVM 18
-            LLVM_LIBDIR="/usr/lib/llvm-18/lib"
-          fi
+          # Get LLVM libdir using llvm-config (installed by llvm package)
+          LLVM_LIBDIR=$(llvm-config --libdir)
           echo "Found LLVM libdir: ${LLVM_LIBDIR}"
+          ls -la "${LLVM_LIBDIR}"/libclang* 2>/dev/null || true
           
-          # Ensure libclang.so exists (clang-sys needs it)
+          # Ensure libclang.so exists (clang-sys needs exactly this name)
           if [ ! -f "${LLVM_LIBDIR}/libclang.so" ]; then
-            echo "libclang.so not found in ${LLVM_LIBDIR}, looking for candidates..."
-            CANDIDATE=$(find "${LLVM_LIBDIR}" -name "libclang.so.*" -o -name "libclang-*.so" | head -n 1)
+            echo "libclang.so not found, looking for candidates..."
+            # Try libclang-*.so first (e.g., libclang-18.so)
+            CANDIDATE=$(ls "${LLVM_LIBDIR}"/libclang-*.so 2>/dev/null | head -n 1)
+            if [ -z "${CANDIDATE}" ]; then
+              # Try libclang.so.* (e.g., libclang.so.18)
+              CANDIDATE=$(ls "${LLVM_LIBDIR}"/libclang.so.* 2>/dev/null | head -n 1)
+            fi
             if [ -n "${CANDIDATE}" ]; then
-              echo "Creating symlink ${LLVM_LIBDIR}/libclang.so -> ${CANDIDATE}"
+              echo "Creating symlink: ${LLVM_LIBDIR}/libclang.so -> ${CANDIDATE}"
               sudo ln -sf "${CANDIDATE}" "${LLVM_LIBDIR}/libclang.so"
+            else
+              echo "ERROR: No libclang candidate found!"
+              exit 1
             fi
           fi
+          
+          # Verify libclang.so is accessible
+          ls -la "${LLVM_LIBDIR}/libclang.so"
 
-          # Export environment variables globally
+          # Export environment variables globally for subsequent steps
           echo "LIBCLANG_PATH=${LLVM_LIBDIR}" >> $GITHUB_ENV
-          # Prepend LLVM libdir and /usr/local/lib to LD_LIBRARY_PATH
-          echo "LD_LIBRARY_PATH=${LLVM_LIBDIR}:/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
-          # Set PKG_CONFIG_PATH globally
-          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${LLVM_LIBDIR}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
