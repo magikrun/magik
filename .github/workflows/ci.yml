@@ -20,9 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Replicate libkrun's setup-build-env approach exactly
-      # Key: install libclang-dev WITHOUT setting LIBCLANG_PATH
-      # Let clang-sys auto-discover libclang
+      # Install build dependencies
+      # crun-sys uses bindgen with runtime feature, which needs libclang.so
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -44,6 +43,20 @@ jobs:
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
+
+      # clang-sys runtime feature needs libclang.so in LD_LIBRARY_PATH or standard paths
+      # Create symlink so clang-sys can find it via dlopen
+      - name: Setup libclang for bindgen
+        run: |
+          # Find the actual libclang.so path
+          LIBCLANG=$(find /usr/lib -name "libclang*.so*" -type f 2>/dev/null | head -1)
+          echo "Found libclang at: $LIBCLANG"
+          # Create symlink in /usr/lib
+          sudo ln -sf "$LIBCLANG" /usr/lib/libclang.so
+          # Also set LIBCLANG_PATH for clang-sys
+          echo "LIBCLANG_PATH=$(dirname $LIBCLANG)" >> $GITHUB_ENV
+          # Verify
+          ls -la /usr/lib/libclang* || true
 
       - name: Set up Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
