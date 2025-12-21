@@ -10,15 +10,19 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
+  LIBKRUN_VERSION: "1.10.1"
 
 jobs:
-  # Linux: Build and test with libcrun (without libkrun to avoid bindgen/libclang issues)
+  # Linux: Full build and test with libcrun + libkrun
   linux:
-    name: Linux (with libcrun)
+    name: Linux (with libcrun + libkrun)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Replicate libkrun's setup-build-env approach exactly
+      # Key: install libclang-dev WITHOUT setting LIBCLANG_PATH
+      # Let clang-sys auto-discover libclang
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -30,9 +34,16 @@ jobs:
             make \
             gcc \
             git \
+            jq \
+            patchelf \
             libseccomp-dev \
             libcap-dev \
-            libyajl-dev
+            libyajl-dev \
+            libclang-dev \
+            libvirglrenderer-dev \
+            libepoxy-dev \
+            libdrm-dev \
+            libpipewire-0.3-dev
 
       - name: Set up Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -90,32 +101,86 @@ jobs:
           # Copy ocispec headers (generated during build)
           find libocispec -name "*.h" -exec sudo cp {} /usr/local/include/ocispec/ \;
 
+      # Replicate libkrun's CI: download prebuilt libkrunfw
+      - name: Install libkrunfw from prebuilt release
+        run: |
+          LIBKRUNFW_TAG=$(curl -sL https://api.github.com/repos/containers/libkrunfw/releases/latest | jq -r .tag_name)
+          echo "Installing libkrunfw ${LIBKRUNFW_TAG}"
+          curl -L -o /tmp/libkrunfw-x86_64.tgz \
+            "https://github.com/containers/libkrunfw/releases/download/${LIBKRUNFW_TAG}/libkrunfw-x86_64.tgz"
+          mkdir -p /tmp/libkrunfw-extract
+          tar xf /tmp/libkrunfw-x86_64.tgz -C /tmp/libkrunfw-extract
+          # Install to system library path (same as libkrun's CI does)
+          sudo mv /tmp/libkrunfw-extract/lib64/* /lib/x86_64-linux-gnu/
+          sudo ldconfig
+
+      - name: Cache libkrun build
+        id: cache-libkrun
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/lib64/libkrun*
+            /usr/local/lib64/pkgconfig/libkrun.pc
+            /usr/local/include/libkrun.h
+          key: libkrun-ubuntu-${{ env.LIBKRUN_VERSION }}-v5
+
+      # Replicate libkrun's CI: build libkrun from source
+      - name: Build libkrun
+        if: steps.cache-libkrun.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
+            https://github.com/containers/libkrun.git /tmp/libkrun
+          cd /tmp/libkrun
+          
+          # Create fake init binary (not needed for library build)
+          mkdir -p init && touch init/init
+          
+          # Build libkrun - same as their CI (no LIBCLANG_PATH!)
+          RUSTFLAGS="-A warnings" make PREFIX=/usr/local
+          sudo make PREFIX=/usr/local install
+          
+          sudo ldconfig
+
       - name: Setup library paths
         run: |
-          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=/usr/local/lib" >> $GITHUB_ENV
+          # Symlink lib64 libs to lib for tools that expect lib/
+          sudo mkdir -p /usr/local/lib/pkgconfig
+          for f in /usr/local/lib64/libkrun*; do
+            [ -f "$f" ] && sudo ln -sf "$f" /usr/local/lib/$(basename "$f")
+          done
+          # Also symlink pkgconfig
+          [ -f /usr/local/lib64/pkgconfig/libkrun.pc ] && \
+            sudo ln -sf /usr/local/lib64/pkgconfig/libkrun.pc /usr/local/lib/pkgconfig/
+          # Add lib64 to ldconfig
+          echo "/usr/local/lib64" | sudo tee /etc/ld.so.conf.d/local-lib64.conf
           sudo ldconfig
+          
+          # Export for subsequent steps
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
 
       - name: Verify library installation
         run: |
-          echo "=== Checking /usr/local/lib ==="
-          ls -la /usr/local/lib/libcrun* || true
-          ls -la /usr/local/lib/pkgconfig/ || true
-          echo "=== pkg-config check ==="
+          echo "=== libcrun ==="
           pkg-config --modversion libcrun
           pkg-config --libs libcrun
+          echo "=== libkrun ==="
+          pkg-config --modversion libkrun
+          pkg-config --libs libkrun
 
       - name: Check formatting
         run: cargo fmt --check
 
+      # Build with default features (includes runtime-krun)
+      # NO LIBCLANG_PATH set - let clang-sys auto-discover
       - name: Clippy
-        run: cargo clippy --workspace --no-default-features -- -D warnings -A clippy::too_many_arguments
+        run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
 
       - name: Build
-        run: cargo build --workspace --no-default-features
+        run: cargo build --workspace
 
       - name: Run tests
-        run: cargo test --workspace --no-default-features
+        run: cargo test --workspace
 
       - name: Build release
-        run: cargo build --release --workspace --no-default-features
+        run: cargo build --release --workspace
