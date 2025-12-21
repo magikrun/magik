@@ -11,6 +11,10 @@ env:
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
+  # LLVM/Clang paths for bindgen (clang-sys runtime feature)
+  LIBCLANG_PATH: /usr/lib/llvm-18/lib
+  LLVM_CONFIG_PATH: /usr/bin/llvm-config-18
+  LD_LIBRARY_PATH: /usr/lib/llvm-18/lib:/usr/local/lib:/usr/local/lib64
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -44,69 +48,42 @@ jobs:
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Debug: Show what libclang files exist  
-          echo "=== Searching for libclang libraries ==="
-          echo "--- LLVM-18 lib directory ---"
-          ls -la /usr/lib/llvm-18/lib/libclang* 2>/dev/null || echo "  No files in /usr/lib/llvm-18/lib/"
-          echo "--- x86_64-linux-gnu directory ---"
-          ls -la /usr/lib/x86_64-linux-gnu/libclang* 2>/dev/null || echo "  No files in /usr/lib/x86_64-linux-gnu/"
-          echo "--- Find all libclang .so files ---"
-          find /usr -name "libclang*.so*" 2>/dev/null | head -20
-          
-          # Find the actual libclang shared library (resolve symlinks to find real file)
-          echo ""
-          echo "=== Finding libclang shared library ==="
-          
-          # First, check if libclang-18-dev provides a development symlink
-          LIBCLANG_SO=""
-          
-          # Check LLVM-18's lib directory first
-          if [ -e "/usr/lib/llvm-18/lib/libclang.so" ]; then
-            LIBCLANG_SO="/usr/lib/llvm-18/lib/libclang.so"
-          elif [ -e "/usr/lib/llvm-18/lib/libclang-18.so" ]; then
-            LIBCLANG_SO="/usr/lib/llvm-18/lib/libclang-18.so"
-          else
-            # Find any libclang .so file
-            LIBCLANG_SO=$(find /usr/lib -name "libclang*.so" -o -name "libclang*.so.*" 2>/dev/null | grep -v ".a$" | head -n 1)
-          fi
-          
-          if [ -z "${LIBCLANG_SO}" ]; then
-            echo "ERROR: Could not find any libclang shared library!"
+          # Verify LLVM-18 libclang is installed correctly
+          echo "=== Verifying LLVM-18 libclang installation ==="
+          ls -la /usr/lib/llvm-18/lib/libclang* || {
+            echo "ERROR: libclang not found in /usr/lib/llvm-18/lib/"
             exit 1
+          }
+          
+          # Ensure libclang.so symlink exists (clang-sys looks for this name)
+          if [ ! -e "/usr/lib/llvm-18/lib/libclang.so" ]; then
+            echo "Creating libclang.so symlink..."
+            # Find the actual library and create symlink
+            ACTUAL_LIB=$(ls /usr/lib/llvm-18/lib/libclang-18.so* 2>/dev/null | head -1)
+            if [ -n "${ACTUAL_LIB}" ]; then
+              sudo ln -sf "$(basename ${ACTUAL_LIB})" /usr/lib/llvm-18/lib/libclang.so
+            else
+              echo "ERROR: Cannot find libclang-18.so in /usr/lib/llvm-18/lib/"
+              exit 1
+            fi
           fi
           
-          # Resolve to absolute path if symlink
-          LIBCLANG_SO=$(readlink -f "${LIBCLANG_SO}")
-          LIBCLANG_DIR=$(dirname "${LIBCLANG_SO}")
-          
-          echo "Found libclang: ${LIBCLANG_SO}"
-          echo "Library directory: ${LIBCLANG_DIR}"
-          
-          # Create libclang.so symlink if it doesn't exist in that directory
-          if [ ! -e "${LIBCLANG_DIR}/libclang.so" ]; then
-            echo "Creating symlink: ${LIBCLANG_DIR}/libclang.so -> $(basename ${LIBCLANG_SO})"
-            sudo ln -sf "$(basename ${LIBCLANG_SO})" "${LIBCLANG_DIR}/libclang.so"
-          fi
-          
+          # Show final state
           echo ""
-          echo "=== Final libclang state ==="
-          ls -la "${LIBCLANG_DIR}"/libclang*
+          echo "=== libclang symlink state ==="
+          ls -la /usr/lib/llvm-18/lib/libclang.so
           
-          # Verify the library can be loaded
+          # Test loading with Python
           echo ""
           echo "=== Testing libclang loading ==="
-          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_DIR}/libclang.so'); print('SUCCESS: Loaded ${LIBCLANG_DIR}/libclang.so')"
+          python3 -c "import ctypes; lib = ctypes.CDLL('/usr/lib/llvm-18/lib/libclang.so'); print('SUCCESS: Loaded /usr/lib/llvm-18/lib/libclang.so')"
           
-          # Export environment variables for subsequent steps
-          # IMPORTANT: LIBCLANG_PATH must be the DIRECTORY, not the full file path
-          # clang-sys runtime feature searches for libclang.so within this directory
-          echo "LIBCLANG_PATH=${LIBCLANG_DIR}" >> $GITHUB_ENV
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-18" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=${LIBCLANG_DIR}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
-          
-          # Update library cache
+          # Also add to ldconfig for runtime discovery
+          echo "/usr/lib/llvm-18/lib" | sudo tee /etc/ld.so.conf.d/llvm-18.conf
           sudo ldconfig
+          
+          # Export PKG_CONFIG_PATH for library builds
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
@@ -245,36 +222,22 @@ jobs:
 
       - name: Debug environment before build
         run: |
-          echo "=== Environment Variables ==="
+          echo "=== Environment Variables (from workflow-level env) ==="
           echo "LIBCLANG_PATH=${LIBCLANG_PATH}"
           echo "LLVM_CONFIG_PATH=${LLVM_CONFIG_PATH}"
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
           echo ""
-          echo "=== Checking LIBCLANG_PATH ==="
-          if [ -d "${LIBCLANG_PATH}" ]; then
-            echo "LIBCLANG_PATH points to directory: ${LIBCLANG_PATH}"
-            echo "Contents:"
-            ls -la "${LIBCLANG_PATH}"/libclang* 2>/dev/null || echo "No libclang files found"
-          elif [ -f "${LIBCLANG_PATH}" ]; then
-            echo "WARNING: LIBCLANG_PATH points to a file (should be directory): ${LIBCLANG_PATH}"
-            ls -la "${LIBCLANG_PATH}"
-          else
-            echo "ERROR: LIBCLANG_PATH does not exist: ${LIBCLANG_PATH}"
+          echo "=== Verifying LIBCLANG_PATH directory ==="
+          ls -la ${LIBCLANG_PATH}/libclang* 2>/dev/null || {
+            echo "ERROR: No libclang files in ${LIBCLANG_PATH}"
             exit 1
-          fi
+          }
           echo ""
-          echo "=== Test loading libclang from directory ==="
-          LIBCLANG_FILE="${LIBCLANG_PATH}/libclang.so"
-          if [ -f "${LIBCLANG_FILE}" ] || [ -L "${LIBCLANG_FILE}" ]; then
-            python3 -c "
-          import ctypes
-          lib = ctypes.CDLL('${LIBCLANG_FILE}')
-          print('SUCCESS: Loaded ${LIBCLANG_FILE}')
-          "
-          else
-            echo "ERROR: libclang.so not found in ${LIBCLANG_PATH}"
-            exit 1
-          fi
+          echo "=== Testing libclang.so can be loaded ==="
+          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_PATH}/libclang.so'); print('SUCCESS: Loaded ${LIBCLANG_PATH}/libclang.so')"
+          echo ""
+          echo "=== Checking ldconfig knows about LLVM path ==="
+          ldconfig -p | grep -i clang || echo "  (libclang not in ldconfig cache)"
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
