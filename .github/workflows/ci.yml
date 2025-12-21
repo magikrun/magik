@@ -98,8 +98,9 @@ jobs:
           python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_DIR}/libclang.so'); print('SUCCESS: Loaded ${LIBCLANG_DIR}/libclang.so')"
           
           # Export environment variables for subsequent steps
-          # Set LIBCLANG_PATH to the FULL PATH of the .so file (clang-sys supports this)
-          echo "LIBCLANG_PATH=${LIBCLANG_DIR}/libclang.so" >> $GITHUB_ENV
+          # IMPORTANT: LIBCLANG_PATH must be the DIRECTORY, not the full file path
+          # clang-sys runtime feature searches for libclang.so within this directory
+          echo "LIBCLANG_PATH=${LIBCLANG_DIR}" >> $GITHUB_ENV
           echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-18" >> $GITHUB_ENV
           echo "LD_LIBRARY_PATH=${LIBCLANG_DIR}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
@@ -250,31 +251,30 @@ jobs:
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
           echo ""
           echo "=== Checking LIBCLANG_PATH ==="
-          if [ -f "${LIBCLANG_PATH}" ]; then
-            echo "LIBCLANG_PATH points to a file: ${LIBCLANG_PATH}"
-            ls -la "${LIBCLANG_PATH}"
-          elif [ -d "${LIBCLANG_PATH}" ]; then
-            echo "LIBCLANG_PATH points to a directory: ${LIBCLANG_PATH}"
+          if [ -d "${LIBCLANG_PATH}" ]; then
+            echo "LIBCLANG_PATH points to directory: ${LIBCLANG_PATH}"
+            echo "Contents:"
             ls -la "${LIBCLANG_PATH}"/libclang* 2>/dev/null || echo "No libclang files found"
+          elif [ -f "${LIBCLANG_PATH}" ]; then
+            echo "WARNING: LIBCLANG_PATH points to a file (should be directory): ${LIBCLANG_PATH}"
+            ls -la "${LIBCLANG_PATH}"
           else
-            echo "WARNING: LIBCLANG_PATH does not exist: ${LIBCLANG_PATH}"
+            echo "ERROR: LIBCLANG_PATH does not exist: ${LIBCLANG_PATH}"
+            exit 1
           fi
           echo ""
-          echo "=== Test loading libclang ==="
-          python3 -c "
+          echo "=== Test loading libclang from directory ==="
+          LIBCLANG_FILE="${LIBCLANG_PATH}/libclang.so"
+          if [ -f "${LIBCLANG_FILE}" ] || [ -L "${LIBCLANG_FILE}" ]; then
+            python3 -c "
           import ctypes
-          import os
-          libclang_path = os.environ.get('LIBCLANG_PATH', '')
-          # If LIBCLANG_PATH is a file, try to load it directly
-          if os.path.isfile(libclang_path):
-              try:
-                  lib = ctypes.CDLL(libclang_path)
-                  print(f'SUCCESS: Loaded {libclang_path}')
-              except OSError as e:
-                  print(f'FAILED to load {libclang_path}: {e}')
-          else:
-              print(f'LIBCLANG_PATH is not a file: {libclang_path}')
+          lib = ctypes.CDLL('${LIBCLANG_FILE}')
+          print('SUCCESS: Loaded ${LIBCLANG_FILE}')
           "
+          else
+            echo "ERROR: libclang.so not found in ${LIBCLANG_PATH}"
+            exit 1
+          fi
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
