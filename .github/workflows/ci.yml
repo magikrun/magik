@@ -141,6 +141,11 @@ jobs:
       - name: Build libkrun
         if: steps.cache-libkrun.outputs.cache-hit != 'true'
         run: |
+          # Find libclang for bindgen (libkrun uses bindgen internally)
+          LIBCLANG=$(find /usr/lib -name "libclang*.so*" -type f 2>/dev/null | head -1)
+          export LIBCLANG_PATH=$(dirname "$LIBCLANG")
+          echo "Using LIBCLANG_PATH=$LIBCLANG_PATH"
+          
           git clone --depth 1 --branch v${{ env.LIBKRUN_VERSION }} \
             https://github.com/containers/libkrun.git /tmp/libkrun
           cd /tmp/libkrun
@@ -148,7 +153,7 @@ jobs:
           # Create fake init binary (not needed for library build)
           mkdir -p init && touch init/init
           
-          # Build libkrun - same as their CI (no LIBCLANG_PATH!)
+          # Build libkrun with LIBCLANG_PATH set
           RUSTFLAGS="-A warnings" make PREFIX=/usr/local
           sudo make PREFIX=/usr/local install
           
@@ -184,8 +189,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
-      # krun-sys is now a required dependency
-      # NO LIBCLANG_PATH set - let clang-sys auto-discover
+      # krun-sys and crun-sys use bindgen which needs libclang
+      # LIBCLANG_PATH is set earlier in "Setup libclang for bindgen" step
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
 
