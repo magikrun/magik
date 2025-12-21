@@ -36,42 +36,48 @@ jobs:
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
-            llvm \
             libclang-dev \
             libvirglrenderer-dev \
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Get LLVM libdir using llvm-config (installed by llvm package)
-          LLVM_LIBDIR=$(llvm-config --libdir)
-          echo "Found LLVM libdir: ${LLVM_LIBDIR}"
-          ls -la "${LLVM_LIBDIR}"/libclang* 2>/dev/null || true
+          # Find where libclang shared library actually lives
+          # On Ubuntu 24.04, libclang1-18 installs to /usr/lib/x86_64-linux-gnu/
+          echo "=== Searching for libclang shared libraries ==="
+          find /usr -name "libclang*.so*" -type f 2>/dev/null | head -20
           
-          # Ensure libclang.so exists (clang-sys needs exactly this name)
-          if [ ! -f "${LLVM_LIBDIR}/libclang.so" ]; then
-            echo "libclang.so not found, looking for candidates..."
-            # Try libclang-*.so first (e.g., libclang-18.so)
-            CANDIDATE=$(ls "${LLVM_LIBDIR}"/libclang-*.so 2>/dev/null | head -n 1)
-            if [ -z "${CANDIDATE}" ]; then
-              # Try libclang.so.* (e.g., libclang.so.18)
-              CANDIDATE=$(ls "${LLVM_LIBDIR}"/libclang.so.* 2>/dev/null | head -n 1)
-            fi
-            if [ -n "${CANDIDATE}" ]; then
-              echo "Creating symlink: ${LLVM_LIBDIR}/libclang.so -> ${CANDIDATE}"
-              sudo ln -sf "${CANDIDATE}" "${LLVM_LIBDIR}/libclang.so"
-            else
-              echo "ERROR: No libclang candidate found!"
-              exit 1
-            fi
+          # Find the actual libclang shared library (not symlinks)
+          LIBCLANG_SO=$(find /usr -name "libclang-*.so.*" -type f 2>/dev/null | head -n 1)
+          if [ -z "${LIBCLANG_SO}" ]; then
+            LIBCLANG_SO=$(find /usr -name "libclang.so.*" -type f 2>/dev/null | head -n 1)
           fi
           
-          # Verify libclang.so is accessible
-          ls -la "${LLVM_LIBDIR}/libclang.so"
+          if [ -z "${LIBCLANG_SO}" ]; then
+            echo "ERROR: Could not find libclang shared library!"
+            exit 1
+          fi
+          
+          LIBCLANG_DIR=$(dirname "${LIBCLANG_SO}")
+          echo "Found libclang at: ${LIBCLANG_SO}"
+          echo "libclang directory: ${LIBCLANG_DIR}"
+          
+          # Create libclang.so symlink if it doesn't exist (clang-sys needs this exact name)
+          if [ ! -e "${LIBCLANG_DIR}/libclang.so" ]; then
+            echo "Creating symlink: ${LIBCLANG_DIR}/libclang.so -> ${LIBCLANG_SO}"
+            sudo ln -sf "${LIBCLANG_SO}" "${LIBCLANG_DIR}/libclang.so"
+          fi
+          
+          # Verify the symlink
+          ls -la "${LIBCLANG_DIR}"/libclang*
+          
+          # Test that we can actually load the library
+          echo "=== Testing libclang loading ==="
+          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_DIR}/libclang.so'); print('SUCCESS: Loaded libclang from ${LIBCLANG_DIR}')"
 
           # Export environment variables globally for subsequent steps
-          echo "LIBCLANG_PATH=${LLVM_LIBDIR}" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=${LLVM_LIBDIR}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=${LIBCLANG_DIR}" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${LIBCLANG_DIR}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
             
 
