@@ -171,7 +171,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
-      # Build with default features (includes runtime-krun)
+      # krun-sys is now a required dependency
       # NO LIBCLANG_PATH set - let clang-sys auto-discover
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments

@@ -6,12 +6,8 @@ description = "Magik machineplane daemon"
 build = "build.rs"
 
 [features]
-# Default features enable libkrun on supported platforms (macOS/Linux)
-default = ["runtime-krun"]
 # Automatically enabled by build.rs when workplane binary is available
 embedded-workplane = []
-# libkrun microVM support (requires libkrun system library)
-runtime-krun = ["dep:krun-sys"]
 
 [dependencies]
 axum = "0.8"
@@ -46,8 +42,9 @@ oci-distribution = "0.11"
 flate2 = "1.0"
 tar = "0.4"
 
-# libkrun microVM support (Linux KVM / macOS HVF) - optional
-krun-sys = { version = "1.10", optional = true }
+# libkrun microVM support (Linux KVM / macOS HVF)
+# Use git dependency to match the libkrun version we build in CI
+krun-sys = { git = "https://github.com/containers/libkrun", tag = "v1.10.1" }
 
 # libcrun container support (stubs on non-Linux platforms)
 crun-sys = "0.1.1"
