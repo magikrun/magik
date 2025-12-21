@@ -43,9 +43,18 @@ jobs:
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
-          # Find and export LIBCLANG_PATH for bindgen
+          
+          # Find LLVM/Clang paths for bindgen
           LLVM_VERSION=$(llvm-config --version | cut -d. -f1)
-          echo "LIBCLANG_PATH=/usr/lib/llvm-${LLVM_VERSION}/lib" >> $GITHUB_ENV
+          LLVM_LIB_PATH="/usr/lib/llvm-${LLVM_VERSION}/lib"
+          echo "LLVM version: $LLVM_VERSION"
+          echo "LLVM lib path: $LLVM_LIB_PATH"
+          ls -la "$LLVM_LIB_PATH"/libclang* || true
+          
+          # Export for subsequent steps
+          echo "LIBCLANG_PATH=$LLVM_LIB_PATH" >> $GITHUB_ENV
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${LLVM_VERSION}" >> $GITHUB_ENV
+          echo "CLANG_PATH=/usr/bin/clang-${LLVM_VERSION}" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
@@ -187,22 +196,22 @@ jobs:
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:${{ env.LIBCLANG_PATH }}
 
       - name: Build
         run: cargo build --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:${{ env.LIBCLANG_PATH }}
 
       - name: Run tests
         run: cargo test --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:${{ env.LIBCLANG_PATH }}
 
       - name: Build release
         run: cargo build --release --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
+          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:${{ env.LIBCLANG_PATH }}
