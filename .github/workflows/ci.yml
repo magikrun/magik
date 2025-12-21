@@ -43,30 +43,41 @@ jobs:
             llvm-14 \
             llvm-14-dev \
             libclang-14-dev \
+            libclang1-14 \
             clang-14 \
             libvirglrenderer-dev \
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
           
+          # Set up LLVM 14 as the default using update-alternatives
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-14 100
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
+          
           # Debug: show what libclang files exist
           echo "=== LLVM 14 lib directory ==="
           ls -la /usr/lib/llvm-14/lib/libclang* || true
+          ls -la /usr/lib/x86_64-linux-gnu/libclang* || true
           
-          # clang-sys searches for libclang.so in LIBCLANG_PATH
-          # Ensure libclang.so symlink exists (not just libclang.so.14)
-          if [ -f /usr/lib/llvm-14/lib/libclang.so.14 ] && [ ! -f /usr/lib/llvm-14/lib/libclang.so ]; then
-            sudo ln -sf /usr/lib/llvm-14/lib/libclang.so.14 /usr/lib/llvm-14/lib/libclang.so
+          # Find and symlink libclang.so - clang-sys needs this exact name
+          LIBCLANG_SO=$(find /usr/lib -name "libclang.so.*" 2>/dev/null | head -1)
+          if [ -n "$LIBCLANG_SO" ]; then
+            echo "Found libclang at: $LIBCLANG_SO"
+            LIBCLANG_DIR=$(dirname "$LIBCLANG_SO")
+            sudo ln -sf "$LIBCLANG_SO" "$LIBCLANG_DIR/libclang.so"
+            echo "Created symlink: $LIBCLANG_DIR/libclang.so -> $LIBCLANG_SO"
           fi
           
-          # Verify llvm-config is available
-          echo "=== llvm-config-14 ==="
-          /usr/bin/llvm-config-14 --version || true
-          /usr/bin/llvm-config-14 --libdir || true
+          # Also create in LLVM dir if needed
+          if [ -f /usr/lib/llvm-14/lib/libclang.so.14 ] && [ ! -f /usr/lib/llvm-14/lib/libclang.so ]; then
+            sudo ln -sf libclang.so.14 /usr/lib/llvm-14/lib/libclang.so
+          fi
           
-          # Show final state
-          echo "=== Final libclang files ==="
+          # Verify
+          echo "=== Final state ==="
           ls -la /usr/lib/llvm-14/lib/libclang* || true
+          llvm-config --version
+          llvm-config --libdir
             
 
       - name: Set up Rust toolchain
