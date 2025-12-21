@@ -56,24 +56,36 @@ jobs:
           echo "=== x86_64-linux-gnu directory ==="
           ls -la /usr/lib/x86_64-linux-gnu/libclang* 2>/dev/null || echo "No files in /usr/lib/x86_64-linux-gnu/"
           
-          echo "=== llvm-config-18 output ==="
-          llvm-config-18 --libdir || echo "llvm-config-18 not found"
+          echo "=== llvm-config-18 --libdir ==="
+          LLVM_LIBDIR=$(llvm-config-18 --libdir)
+          echo "LLVM libdir: ${LLVM_LIBDIR}"
           
-          # Verify the library can be loaded from LIBCLANG_PATH
-          echo "=== Testing libclang loading from LIBCLANG_PATH ==="
-          python3 -c "
-          import ctypes
-          import os
-          path = os.environ.get('LIBCLANG_PATH', '/usr/lib/llvm-18/lib')
-          # Try different library names
-          for name in ['libclang.so', 'libclang-18.so', 'libclang.so.18', 'libclang-18.so.1']:
-              try:
-                  lib = ctypes.CDLL(f'{path}/{name}')
-                  print(f'SUCCESS: Loaded {path}/{name}')
-                  break
-              except OSError as e:
-                  print(f'Failed to load {path}/{name}: {e}')
-          "
+          # Create libclang.so symlink if it doesn't exist
+          # clang-sys looks for 'libclang.so' specifically
+          echo "=== Creating libclang.so symlink ==="
+          if [ ! -e "${LLVM_LIBDIR}/libclang.so" ]; then
+            # Find the actual libclang library and create symlink
+            LIBCLANG_REAL=$(find "${LLVM_LIBDIR}" -name "libclang*.so*" -type f 2>/dev/null | head -n 1)
+            if [ -n "${LIBCLANG_REAL}" ]; then
+              echo "Creating symlink: ${LLVM_LIBDIR}/libclang.so -> ${LIBCLANG_REAL}"
+              sudo ln -sf "${LIBCLANG_REAL}" "${LLVM_LIBDIR}/libclang.so"
+            else
+              echo "ERROR: No libclang library found in ${LLVM_LIBDIR}"
+              # Try x86_64-linux-gnu as fallback
+              LIBCLANG_REAL=$(find /usr/lib/x86_64-linux-gnu -name "libclang*.so*" -type f 2>/dev/null | head -n 1)
+              if [ -n "${LIBCLANG_REAL}" ]; then
+                echo "Fallback: Creating symlink in ${LLVM_LIBDIR} -> ${LIBCLANG_REAL}"
+                sudo ln -sf "${LIBCLANG_REAL}" "${LLVM_LIBDIR}/libclang.so"
+              fi
+            fi
+          fi
+          
+          echo "=== Final state of LLVM libdir ==="
+          ls -la "${LLVM_LIBDIR}"/libclang* 2>/dev/null || true
+          
+          # Verify the library can be loaded
+          echo "=== Testing libclang loading ==="
+          python3 -c "import ctypes; lib = ctypes.CDLL('${LLVM_LIBDIR}/libclang.so'); print('SUCCESS: Loaded libclang.so')"
           
           # Update library cache
           sudo ldconfig
