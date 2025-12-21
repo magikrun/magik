@@ -215,6 +215,22 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
+      - name: Debug environment before build
+        run: |
+          echo "=== Environment variables ==="
+          echo "LIBCLANG_PATH=$LIBCLANG_PATH"
+          echo "LLVM_CONFIG_PATH=$LLVM_CONFIG_PATH"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+          echo ""
+          echo "=== Looking for libclang ==="
+          find /usr -name "libclang.so*" 2>/dev/null || true
+          echo ""
+          echo "=== LIBCLANG_PATH contents ==="
+          ls -la "$LIBCLANG_PATH/" 2>/dev/null || echo "LIBCLANG_PATH not set or invalid"
+          echo ""
+          echo "=== Test loading libclang ==="
+          python3 -c "import ctypes; ctypes.CDLL('$LIBCLANG_PATH/libclang.so')" 2>&1 || echo "Failed to load libclang"
+
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
         env:
