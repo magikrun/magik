@@ -43,8 +43,8 @@ flate2 = "1.0"
 tar = "0.4"
 
 # libkrun microVM support (Linux KVM / macOS HVF)
-# Use git dependency to match the libkrun version we build in CI
-krun-sys = { git = "https://github.com/containers/libkrun", tag = "v1.10.1" }
+# Requires libkrun installed on system (CI builds from source)
+krun-sys = "1.10"
 
 # libcrun container support (stubs on non-Linux platforms)
 crun-sys = "0.1.1"
