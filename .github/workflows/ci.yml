@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
-  LIBKRUN_VERSION: "1.10.1"
+  LIBKRUN_VERSION: "1.16.0"
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
