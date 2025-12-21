@@ -12,9 +12,11 @@ env:
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
   # LLVM/Clang paths for bindgen (clang-sys runtime feature)
-  LIBCLANG_PATH: /usr/lib/llvm-18/lib
+  # libclang-18-dev installs to /usr/lib/x86_64-linux-gnu, not /usr/lib/llvm-18/lib
+  LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
+  CLANG_PATH: /usr/bin/clang-18
   LLVM_CONFIG_PATH: /usr/bin/llvm-config-18
-  LD_LIBRARY_PATH: /usr/lib/llvm-18/lib:/usr/local/lib:/usr/local/lib64
+  LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/lib/llvm-18/lib:/usr/local/lib:/usr/local/lib64
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -48,38 +50,48 @@ jobs:
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Verify LLVM-18 libclang is installed correctly
-          echo "=== Verifying LLVM-18 libclang installation ==="
-          ls -la /usr/lib/llvm-18/lib/libclang* || {
-            echo "ERROR: libclang not found in /usr/lib/llvm-18/lib/"
-            exit 1
-          }
+          # Debug: Show where libclang files are actually installed
+          echo "=== Finding all libclang shared libraries ==="
+          find /usr/lib -name "libclang*.so*" 2>/dev/null | head -20
           
-          # Ensure libclang.so symlink exists (clang-sys looks for this name)
-          if [ ! -e "/usr/lib/llvm-18/lib/libclang.so" ]; then
-            echo "Creating libclang.so symlink..."
-            # Find the actual library and create symlink
-            ACTUAL_LIB=$(ls /usr/lib/llvm-18/lib/libclang-18.so* 2>/dev/null | head -1)
+          # libclang-18-dev typically installs to /usr/lib/x86_64-linux-gnu
+          echo ""
+          echo "=== Checking /usr/lib/x86_64-linux-gnu for libclang ==="
+          ls -la /usr/lib/x86_64-linux-gnu/libclang* 2>/dev/null || echo "  No libclang in x86_64-linux-gnu"
+          
+          echo ""
+          echo "=== Checking /usr/lib/llvm-18/lib for libclang ==="
+          ls -la /usr/lib/llvm-18/lib/libclang* 2>/dev/null || echo "  No libclang in llvm-18/lib"
+          
+          # Create libclang.so symlink in the directory where the library actually exists
+          # clang-sys looks for "libclang.so" specifically
+          LIBCLANG_DIR="/usr/lib/x86_64-linux-gnu"
+          if [ ! -e "${LIBCLANG_DIR}/libclang.so" ]; then
+            echo ""
+            echo "=== Creating libclang.so symlink ==="
+            # Find the versioned library
+            ACTUAL_LIB=$(ls ${LIBCLANG_DIR}/libclang-*.so* 2>/dev/null | grep -v ".a$" | head -1)
             if [ -n "${ACTUAL_LIB}" ]; then
-              sudo ln -sf "$(basename ${ACTUAL_LIB})" /usr/lib/llvm-18/lib/libclang.so
+              echo "Found: ${ACTUAL_LIB}"
+              sudo ln -sf "$(basename ${ACTUAL_LIB})" "${LIBCLANG_DIR}/libclang.so"
+              echo "Created: ${LIBCLANG_DIR}/libclang.so -> $(basename ${ACTUAL_LIB})"
             else
-              echo "ERROR: Cannot find libclang-18.so in /usr/lib/llvm-18/lib/"
+              echo "ERROR: No libclang-*.so found in ${LIBCLANG_DIR}"
               exit 1
             fi
+          else
+            echo ""
+            echo "=== libclang.so already exists ==="
           fi
           
-          # Show final state
-          echo ""
-          echo "=== libclang symlink state ==="
-          ls -la /usr/lib/llvm-18/lib/libclang.so
+          ls -la ${LIBCLANG_DIR}/libclang.so
           
           # Test loading with Python
           echo ""
-          echo "=== Testing libclang loading ==="
-          python3 -c "import ctypes; lib = ctypes.CDLL('/usr/lib/llvm-18/lib/libclang.so'); print('SUCCESS: Loaded /usr/lib/llvm-18/lib/libclang.so')"
+          echo "=== Testing libclang loading with Python ==="
+          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_DIR}/libclang.so'); print('SUCCESS: Loaded ${LIBCLANG_DIR}/libclang.so')"
           
-          # Also add to ldconfig for runtime discovery
-          echo "/usr/lib/llvm-18/lib" | sudo tee /etc/ld.so.conf.d/llvm-18.conf
+          # Update ldconfig
           sudo ldconfig
           
           # Export PKG_CONFIG_PATH for library builds
@@ -224,6 +236,7 @@ jobs:
         run: |
           echo "=== Environment Variables (from workflow-level env) ==="
           echo "LIBCLANG_PATH=${LIBCLANG_PATH}"
+          echo "CLANG_PATH=${CLANG_PATH}"
           echo "LLVM_CONFIG_PATH=${LLVM_CONFIG_PATH}"
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
           echo ""
@@ -233,11 +246,20 @@ jobs:
             exit 1
           }
           echo ""
+          echo "=== Verifying libclang.so symlink ==="
+          ls -la ${LIBCLANG_PATH}/libclang.so || {
+            echo "ERROR: libclang.so symlink missing!"
+            exit 1
+          }
+          echo ""
           echo "=== Testing libclang.so can be loaded ==="
           python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_PATH}/libclang.so'); print('SUCCESS: Loaded ${LIBCLANG_PATH}/libclang.so')"
           echo ""
-          echo "=== Checking ldconfig knows about LLVM path ==="
-          ldconfig -p | grep -i clang || echo "  (libclang not in ldconfig cache)"
+          echo "=== Checking ldconfig ==="
+          ldconfig -p | grep -i clang | head -5 || echo "  (libclang not in ldconfig cache)"
+          echo ""
+          echo "=== Verifying clang-18 binary ==="
+          ${CLANG_PATH} --version || echo "ERROR: clang-18 not found"
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
