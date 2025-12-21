@@ -41,6 +41,12 @@ jobs:
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
+          
+          # Find and export LLVM libdir for clang-sys/bindgen
+          LLVM_LIBDIR=$(llvm-config --libdir 2>/dev/null || echo "/usr/lib/llvm-18/lib")
+          echo "LIBCLANG_PATH=${LLVM_LIBDIR}" >> $GITHUB_ENV
+          echo "Found LLVM libdir: ${LLVM_LIBDIR}"
+          ls -la "${LLVM_LIBDIR}"/libclang* 2>/dev/null || true
             
 
       - name: Set up Rust toolchain
@@ -181,11 +187,12 @@ jobs:
 
       - name: Debug environment before build
         run: |
-          echo "=== Looking for libclang ==="
-          find /usr -name "libclang*.so*" 2>/dev/null | head -20
+          echo "=== LIBCLANG_PATH ==="
+          echo "LIBCLANG_PATH=${LIBCLANG_PATH}"
+          ls -la "${LIBCLANG_PATH}"/libclang* 2>/dev/null || true
           echo ""
           echo "=== Test loading libclang ==="
-          python3 -c "import ctypes; lib = ctypes.CDLL('/usr/lib/llvm-18/lib/libclang.so'); print('SUCCESS: Loaded libclang!')" 2>&1 || python3 -c "import ctypes; lib = ctypes.CDLL('/usr/lib/x86_64-linux-gnu/libclang.so'); print('SUCCESS: Loaded libclang!')" 2>&1 || echo "FAILED to load libclang"
+          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_PATH}/libclang.so'); print('SUCCESS: Loaded libclang!')" 2>&1 || echo "FAILED to load libclang"
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
