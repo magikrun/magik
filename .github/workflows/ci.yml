@@ -164,10 +164,19 @@ jobs:
           echo "=== Checking /usr/local/lib ==="
           ls -la /usr/local/lib/ || true
           ls -la /usr/local/lib/pkgconfig/ || true
+          echo "=== Checking /usr/local/include ==="
+          ls -la /usr/local/include/ || true
+          ls -la /usr/local/include/libkrun* || true
           echo "=== pkg-config checks ==="
           pkg-config --modversion libcrun
           pkg-config --modversion libkrun
           pkg-config --libs libkrun
+          pkg-config --cflags libkrun
+          echo "=== libkrun.pc content ==="
+          cat /usr/local/lib64/pkgconfig/libkrun.pc || cat /usr/local/lib/pkgconfig/libkrun.pc || true
+          echo "=== LIBCLANG_PATH ==="
+          echo "LIBCLANG_PATH=$LIBCLANG_PATH"
+          ls -la $LIBCLANG_PATH/ || true
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
 
