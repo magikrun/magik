@@ -43,10 +43,30 @@ jobs:
             libpipewire-0.3-dev
           
           # Find and export LLVM libdir for clang-sys/bindgen
-          LLVM_LIBDIR=$(llvm-config --libdir 2>/dev/null || echo "/usr/lib/llvm-18/lib")
-          echo "LIBCLANG_PATH=${LLVM_LIBDIR}" >> $GITHUB_ENV
+          if command -v llvm-config >/dev/null 2>&1; then
+            LLVM_LIBDIR=$(llvm-config --libdir)
+          else
+            # Fallback for Ubuntu 24.04 / LLVM 18
+            LLVM_LIBDIR="/usr/lib/llvm-18/lib"
+          fi
           echo "Found LLVM libdir: ${LLVM_LIBDIR}"
-          ls -la "${LLVM_LIBDIR}"/libclang* 2>/dev/null || true
+          
+          # Ensure libclang.so exists (clang-sys needs it)
+          if [ ! -f "${LLVM_LIBDIR}/libclang.so" ]; then
+            echo "libclang.so not found in ${LLVM_LIBDIR}, looking for candidates..."
+            CANDIDATE=$(find "${LLVM_LIBDIR}" -name "libclang.so.*" -o -name "libclang-*.so" | head -n 1)
+            if [ -n "${CANDIDATE}" ]; then
+              echo "Creating symlink ${LLVM_LIBDIR}/libclang.so -> ${CANDIDATE}"
+              sudo ln -sf "${CANDIDATE}" "${LLVM_LIBDIR}/libclang.so"
+            fi
+          fi
+
+          # Export environment variables globally
+          echo "LIBCLANG_PATH=${LLVM_LIBDIR}" >> $GITHUB_ENV
+          # Prepend LLVM libdir and /usr/local/lib to LD_LIBRARY_PATH
+          echo "LD_LIBRARY_PATH=${LLVM_LIBDIR}:/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH}" >> $GITHUB_ENV
+          # Set PKG_CONFIG_PATH globally
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
@@ -179,8 +199,6 @@ jobs:
           pkg-config --modversion libkrun
           pkg-config --libs libkrun
           pkg-config --cflags libkrun
-        env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
 
       - name: Check formatting
         run: cargo fmt --check
@@ -196,24 +214,12 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
-        env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
 
       - name: Build
         run: cargo build --workspace
-        env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
 
       - name: Run tests
         run: cargo test --workspace
-        env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
 
       - name: Build release
         run: cargo build --release --workspace
-        env:
-          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64
