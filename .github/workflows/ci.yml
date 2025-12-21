@@ -40,6 +40,7 @@ jobs:
             llvm-14-dev \
             libclang-14-dev \
             libclang1-14 \
+            libclang-cpp14 \
             clang-14 \
             libvirglrenderer-dev \
             libepoxy-dev \
@@ -50,36 +51,38 @@ jobs:
           sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-14 100
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100
           
-          # Debug: show what libclang files exist
+          # Debug: Check what libclang1-14 installed
+          echo "=== Files provided by libclang1-14 ==="
+          dpkg -L libclang1-14 | grep -E "\.so" || true
+          
+          # Debug: show what libclang shared libraries exist
+          echo "=== Looking for libclang.so in system ==="
+          find /usr -name "libclang*.so*" 2>/dev/null || true
+          
+          # The shared library is typically in /usr/lib/x86_64-linux-gnu/
+          echo "=== /usr/lib/x86_64-linux-gnu/ libclang files ==="
+          ls -la /usr/lib/x86_64-linux-gnu/libclang* 2>/dev/null || true
+          
+          # Create symlink for libclang.so if needed
+          if [ -f /usr/lib/x86_64-linux-gnu/libclang-14.so.1 ]; then
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/libclang-14.so.1 /usr/lib/x86_64-linux-gnu/libclang.so
+            echo "Created symlink in /usr/lib/x86_64-linux-gnu/"
+          fi
+          
+          # Also try the LLVM lib directory
           echo "=== LLVM 14 lib directory ==="
-          ls -la /usr/lib/llvm-14/lib/libclang* || true
-          ls -la /usr/lib/x86_64-linux-gnu/libclang* || true
+          ls -la /usr/lib/llvm-14/lib/libclang*.so* 2>/dev/null || echo "No .so files in LLVM lib dir"
           
-          # Find and symlink libclang.so - clang-sys needs this exact name
-          LIBCLANG_SO=$(find /usr/lib -name "libclang.so.*" 2>/dev/null | head -1)
-          if [ -n "$LIBCLANG_SO" ]; then
-            echo "Found libclang at: $LIBCLANG_SO"
-            LIBCLANG_DIR=$(dirname "$LIBCLANG_SO")
-            sudo ln -sf "$LIBCLANG_SO" "$LIBCLANG_DIR/libclang.so"
-            echo "Created symlink: $LIBCLANG_DIR/libclang.so -> $LIBCLANG_SO"
-          fi
-          
-          # Also create in LLVM dir if needed
-          if [ -f /usr/lib/llvm-14/lib/libclang.so.14 ] && [ ! -f /usr/lib/llvm-14/lib/libclang.so ]; then
-            sudo ln -sf libclang.so.14 /usr/lib/llvm-14/lib/libclang.so
-          fi
-          
-          # Verify
-          echo "=== Final state ==="
-          ls -la /usr/lib/llvm-14/lib/libclang* || true
+          # Verify llvm-config
+          echo "=== llvm-config ==="
           llvm-config --version
           llvm-config --libdir
           
-          # Export env vars for subsequent steps (cargo build scripts need these)
-          echo "LIBCLANG_PATH=/usr/lib/llvm-14/lib" >> $GITHUB_ENV
+          # Export env vars for subsequent steps
+          # Use the actual location where libclang.so was found
+          echo "LIBCLANG_PATH=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
           echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-14" >> $GITHUB_ENV
-          # LD_LIBRARY_PATH is needed for libloading to actually load libclang.so
-          echo "LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:/usr/local/lib:/usr/local/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/llvm-14/lib:/usr/local/lib:/usr/local/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
@@ -231,34 +234,34 @@ jobs:
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
           echo ""
           echo "=== Looking for libclang ==="
-          find /usr -name "libclang.so*" 2>/dev/null || true
+          find /usr -name "libclang*.so*" 2>/dev/null | head -20
           echo ""
           echo "=== LIBCLANG_PATH contents ==="
-          ls -la "$LIBCLANG_PATH/" 2>/dev/null || echo "LIBCLANG_PATH not set or invalid"
+          ls -la "$LIBCLANG_PATH/libclang"* 2>/dev/null || echo "No libclang files in LIBCLANG_PATH"
           echo ""
           echo "=== Test loading libclang ==="
-          python3 -c "import ctypes; ctypes.CDLL('$LIBCLANG_PATH/libclang.so')" 2>&1 || echo "Failed to load libclang"
+          python3 -c "import ctypes; lib = ctypes.CDLL('$LIBCLANG_PATH/libclang.so'); print('SUCCESS: Loaded libclang!')" 2>&1 || echo "FAILED to load libclang"
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
+          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
 
       - name: Build
         run: cargo build --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
+          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
 
       - name: Run tests
         run: cargo test --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
+          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
 
       - name: Build release
         run: cargo build --release --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
-          LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
+          LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
