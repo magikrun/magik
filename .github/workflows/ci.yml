@@ -11,6 +11,8 @@ env:
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
+  # libclang path for bindgen/clang-sys (Ubuntu 24.04 default location)
+  LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -42,42 +44,27 @@ jobs:
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Find where libclang shared library actually lives
-          # On Ubuntu 24.04, libclang1-18 installs to /usr/lib/x86_64-linux-gnu/
-          echo "=== Searching for libclang shared libraries ==="
-          find /usr -name "libclang*.so*" -type f 2>/dev/null | head -20
+          # Ensure libclang.so symlink exists (clang-sys needs this exact name)
+          echo "=== Setting up libclang for bindgen ==="
+          ls -la "${LIBCLANG_PATH}"/libclang* 2>/dev/null || true
           
-          # Find the actual libclang shared library (not symlinks)
-          LIBCLANG_SO=$(find /usr -name "libclang-*.so.*" -type f 2>/dev/null | head -n 1)
-          if [ -z "${LIBCLANG_SO}" ]; then
-            LIBCLANG_SO=$(find /usr -name "libclang.so.*" -type f 2>/dev/null | head -n 1)
+          # Find the versioned libclang and create unversioned symlink if needed
+          if [ ! -e "${LIBCLANG_PATH}/libclang.so" ]; then
+            LIBCLANG_SO=$(find "${LIBCLANG_PATH}" -name "libclang-*.so.*" -o -name "libclang.so.*" 2>/dev/null | head -n 1)
+            if [ -n "${LIBCLANG_SO}" ]; then
+              echo "Creating symlink: ${LIBCLANG_PATH}/libclang.so -> ${LIBCLANG_SO}"
+              sudo ln -sf "${LIBCLANG_SO}" "${LIBCLANG_PATH}/libclang.so"
+            fi
           fi
           
-          if [ -z "${LIBCLANG_SO}" ]; then
-            echo "ERROR: Could not find libclang shared library!"
-            exit 1
-          fi
+          echo "=== Final libclang state ==="
+          ls -la "${LIBCLANG_PATH}"/libclang*
           
-          LIBCLANG_DIR=$(dirname "${LIBCLANG_SO}")
-          echo "Found libclang at: ${LIBCLANG_SO}"
-          echo "libclang directory: ${LIBCLANG_DIR}"
+          # Verify the library can be loaded
+          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_PATH}/libclang.so'); print('SUCCESS: Loaded libclang!')"
           
-          # Create libclang.so symlink if it doesn't exist (clang-sys needs this exact name)
-          if [ ! -e "${LIBCLANG_DIR}/libclang.so" ]; then
-            echo "Creating symlink: ${LIBCLANG_DIR}/libclang.so -> ${LIBCLANG_SO}"
-            sudo ln -sf "${LIBCLANG_SO}" "${LIBCLANG_DIR}/libclang.so"
-          fi
-          
-          # Verify the symlink
-          ls -la "${LIBCLANG_DIR}"/libclang*
-          
-          # Test that we can actually load the library
-          echo "=== Testing libclang loading ==="
-          python3 -c "import ctypes; lib = ctypes.CDLL('${LIBCLANG_DIR}/libclang.so'); print('SUCCESS: Loaded libclang from ${LIBCLANG_DIR}')"
-
-          # Export environment variables globally for subsequent steps
-          echo "LIBCLANG_PATH=${LIBCLANG_DIR}" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=${LIBCLANG_DIR}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
+          # Add library paths to environment for subsequent steps
+          echo "LD_LIBRARY_PATH=${LIBCLANG_PATH}:/usr/local/lib:/usr/local/lib64" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig" >> $GITHUB_ENV
             
 
