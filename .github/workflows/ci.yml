@@ -91,8 +91,14 @@ jobs:
         id: cache-libcrun
         uses: actions/cache@v4
         with:
-          path: /usr/local
-          key: libcrun-ubuntu-${{ env.LIBCRUN_VERSION }}-v5
+          path: |
+            /usr/local/lib/libcrun*
+            /usr/local/lib/pkgconfig/libcrun.pc
+            /usr/local/include/libcrun
+            /usr/local/include/ocispec
+            /usr/local/include/config.h
+            /usr/local/bin/crun
+          key: libcrun-ubuntu-${{ env.LIBCRUN_VERSION }}-v6
 
       - name: Build libcrun
         if: steps.cache-libcrun.outputs.cache-hit != 'true'
