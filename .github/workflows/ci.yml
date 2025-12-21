@@ -46,9 +46,14 @@ jobs:
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Verify libclang is available
+          # Verify and symlink libclang for bindgen/clang-sys
           echo "=== Checking LLVM 14 installation ==="
           ls -la /usr/lib/llvm-14/lib/libclang* || true
+          
+          # Create symlinks in standard library path so clang-sys can find it
+          sudo ln -sf /usr/lib/llvm-14/lib/libclang.so.14 /usr/lib/libclang.so
+          sudo ln -sf /usr/lib/llvm-14/lib/libclang.so.14 /usr/lib/libclang.so.1
+          sudo ldconfig
             
 
       - name: Set up Rust toolchain
