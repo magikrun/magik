@@ -11,6 +11,9 @@ env:
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
+  # Required for bindgen/clang-sys to find libclang
+  LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
+  LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -247,21 +250,29 @@ jobs:
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
+          LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
 
       - name: Build
         run: cargo build --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
+          LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
 
       - name: Run tests
         run: cargo test --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
+          LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
 
       - name: Build release
         run: cargo build --release --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
+          LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
