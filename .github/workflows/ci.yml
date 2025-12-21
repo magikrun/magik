@@ -78,6 +78,8 @@ jobs:
           # Export env vars for subsequent steps (cargo build scripts need these)
           echo "LIBCLANG_PATH=/usr/lib/llvm-14/lib" >> $GITHUB_ENV
           echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-14" >> $GITHUB_ENV
+          # LD_LIBRARY_PATH is needed for libloading to actually load libclang.so
+          echo "LD_LIBRARY_PATH=/usr/lib/llvm-14/lib:/usr/local/lib:/usr/local/lib64:$LD_LIBRARY_PATH" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
