@@ -11,6 +11,8 @@ env:
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
+  # LLVM 14 is the default on Ubuntu 22.04 (ubuntu-latest)
+  LIBCLANG_PATH: /usr/lib/llvm-14/lib
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -36,25 +38,17 @@ jobs:
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
-            llvm-dev \
-            libclang-dev \
-            clang \
+            llvm-14-dev \
+            libclang-14-dev \
+            clang-14 \
             libvirglrenderer-dev \
             libepoxy-dev \
             libdrm-dev \
             libpipewire-0.3-dev
           
-          # Find LLVM/Clang paths for bindgen
-          LLVM_VERSION=$(llvm-config --version | cut -d. -f1)
-          LLVM_LIB_PATH="/usr/lib/llvm-${LLVM_VERSION}/lib"
-          echo "LLVM version: $LLVM_VERSION"
-          echo "LLVM lib path: $LLVM_LIB_PATH"
-          ls -la "$LLVM_LIB_PATH"/libclang* || true
-          
-          # Export for subsequent steps
-          echo "LIBCLANG_PATH=$LLVM_LIB_PATH" >> $GITHUB_ENV
-          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-${LLVM_VERSION}" >> $GITHUB_ENV
-          echo "CLANG_PATH=/usr/bin/clang-${LLVM_VERSION}" >> $GITHUB_ENV
+          # Verify libclang is available
+          echo "=== Checking LLVM 14 installation ==="
+          ls -la /usr/lib/llvm-14/lib/libclang* || true
             
 
       - name: Set up Rust toolchain
