@@ -11,10 +11,6 @@ env:
   RUST_BACKTRACE: 1
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
-  # LLVM 14 is the default on Ubuntu 22.04 (ubuntu-latest)
-  # clang-sys uses these to find libclang for bindgen
-  LIBCLANG_PATH: /usr/lib/llvm-14/lib
-  LLVM_CONFIG_PATH: /usr/bin/llvm-config-14
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -78,6 +74,10 @@ jobs:
           ls -la /usr/lib/llvm-14/lib/libclang* || true
           llvm-config --version
           llvm-config --libdir
+          
+          # Export env vars for subsequent steps (cargo build scripts need these)
+          echo "LIBCLANG_PATH=/usr/lib/llvm-14/lib" >> $GITHUB_ENV
+          echo "LLVM_CONFIG_PATH=/usr/bin/llvm-config-14" >> $GITHUB_ENV
             
 
       - name: Set up Rust toolchain
@@ -220,25 +220,21 @@ jobs:
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
-          LIBCLANG_PATH: /usr/lib/llvm-14/lib
 
       - name: Build
         run: cargo build --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
-          LIBCLANG_PATH: /usr/lib/llvm-14/lib
 
       - name: Run tests
         run: cargo test --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
-          LIBCLANG_PATH: /usr/lib/llvm-14/lib
 
       - name: Build release
         run: cargo build --release --workspace
         env:
           PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig
           LD_LIBRARY_PATH: /usr/local/lib:/usr/local/lib64:/usr/lib/llvm-14/lib
-          LIBCLANG_PATH: /usr/lib/llvm-14/lib
