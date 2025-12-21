@@ -12,11 +12,9 @@ env:
   LIBCRUN_VERSION: "1.19.1"
   LIBKRUN_VERSION: "1.10.1"
   # LLVM/Clang paths for bindgen (clang-sys runtime feature)
-  # libclang-18-dev installs to /usr/lib/x86_64-linux-gnu, not /usr/lib/llvm-18/lib
+  # Using unversioned packages (llvm, libclang-dev, clang) which provide proper symlinks
   LIBCLANG_PATH: /usr/lib/x86_64-linux-gnu
-  CLANG_PATH: /usr/bin/clang-18
-  LLVM_CONFIG_PATH: /usr/bin/llvm-config-18
-  LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/lib/llvm-18/lib:/usr/local/lib:/usr/local/lib64
+  LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/local/lib64
 
 jobs:
   # Linux: Full build and test with libcrun + libkrun
@@ -42,9 +40,9 @@ jobs:
             libseccomp-dev \
             libcap-dev \
             libyajl-dev \
-            llvm-18 \
-            libclang-18-dev \
-            clang-18 \
+            llvm \
+            libclang-dev \
+            clang \
             libvirglrenderer-dev \
             libepoxy-dev \
             libdrm-dev \
@@ -234,10 +232,8 @@ jobs:
 
       - name: Debug environment before build
         run: |
-          echo "=== Environment Variables (from workflow-level env) ==="
+          echo "=== Environment Variables ==="
           echo "LIBCLANG_PATH=${LIBCLANG_PATH}"
-          echo "CLANG_PATH=${CLANG_PATH}"
-          echo "LLVM_CONFIG_PATH=${LLVM_CONFIG_PATH}"
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
           echo ""
           echo "=== Verifying LIBCLANG_PATH directory ==="
@@ -258,8 +254,11 @@ jobs:
           echo "=== Checking ldconfig ==="
           ldconfig -p | grep -i clang | head -5 || echo "  (libclang not in ldconfig cache)"
           echo ""
-          echo "=== Verifying clang-18 binary ==="
-          ${CLANG_PATH} --version || echo "ERROR: clang-18 not found"
+          echo "=== Verifying clang binary ==="
+          clang --version || echo "ERROR: clang not found"
+          echo ""
+          echo "=== Verifying llvm-config ==="
+          llvm-config --version || echo "ERROR: llvm-config not found"
 
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings -A clippy::too_many_arguments
