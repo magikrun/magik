@@ -268,7 +268,7 @@ but are encoded directly with bincode without an envelope wrapper.
 
    * An awarded node **MUST** store the tender owner info via `set_tender_owner()` for event routing.
    * The node **MUST** register the manifest locally via `register_local_manifest()`.
-   * The node **MUST** deploy via the runtime adapter (Podman).
+   * The node **MUST** deploy via the runtime adapter.
    * Upon deployment completion, the node **MUST** send an Event directly to the tender owner via request-response (`/magik/event/1.0.0`).
    * The Machineplane provides **at-least-once** scheduling semantics; deployment correctness is enforced by the Workplane/workload logic.
 
@@ -496,12 +496,12 @@ machineplane:
     require_signed_messages: true
 ```
 
-### **8.3 Podman Socket Detection**
+### **8.3 Runtime Socket Detection**
 
-The daemon detects the Podman socket in this order:
-1. CLI argument `--podman-socket`
+The daemon detects the runtime socket in this order:
+1. CLI argument `--runtime-socket`
 2. Environment variable `CONTAINER_HOST`
-3. Auto-detection via `PodmanEngine::detect_podman_socket()`
+3. Auto-detection via `RuntimeEngine::detect_socket()`
 
 If no socket is found, runtime-backed deployment is disabled with a warning.
 
@@ -526,7 +526,7 @@ If no socket is found, runtime-backed deployment is disabled with a warning.
 ### **10.1 Kubernetes Compatibility**
 
 * The Machineplane daemon exposes Kubernetes-compatible REST endpoints so that the upstream `kubectl` binary can communicate using its normal HTTP flow.
-* All Kubernetes state is derived from Podman runtime (stateless design).
+* All Kubernetes state is derived from the container runtime (stateless design).
 
 ### **10.2 REST API Endpoints**
 
@@ -543,13 +543,13 @@ If no socket is found, runtime-backed deployment is disabled with a warning.
 | `/disposal/{ns}/{kind}/{name}` | GET | Check if resource is disposing |
 | `/debug/dht/peers` | GET | DHT peer information |
 | `/debug/peers` | GET | Connected peers |
-| `/debug/pods` | GET | Local pods from Podman |
+| `/debug/pods` | GET | Local pods from runtime |
 | `/debug/tenders` | GET | Tracked tenders |
 | `/debug/local_peer_id` | GET | Node's local PeerId |
 
 ### **10.3 Kubernetes API Routes**
 
-* `/api/v1/namespaces/{ns}/pods` - Pod operations (derived from Podman)
+* `/api/v1/namespaces/{ns}/pods` - Pod operations (derived from runtime)
 * `/apis/apps/v1/namespaces/{ns}/deployments` - Deployment operations
 * `/apis` - API group discovery
 

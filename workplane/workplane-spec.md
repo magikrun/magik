@@ -136,7 +136,7 @@ The agent uses the pod's `HOSTNAME` environment variable as a fallback for `--po
 flowchart LR
   subgraph Node
     MD[Machine Daemon]
-    RT[(Runtime - Podman)]
+    RT[(Container Runtime)]
     subgraph Pod
       WA[Workplane Agent<br/>infra container]
       APP[Workload Container(s)]

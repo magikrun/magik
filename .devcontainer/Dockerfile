@@ -10,8 +10,7 @@ ENV PATH=/usr/local/cargo/bin:$PATH
 # - gcc: C compiler for native dependencies
 # - pkg-config: Library configuration
 # - openssl: TLS support for reqwest
-# - fuse-overlayfs: Overlay filesystem for rootless Podman
-# - podman: Container runtime (required for integration tests)
+# - crun: OCI container runtime (required for integration tests)
 # - musl: For static binary builds (optional, matches production)
 RUN pacman -Syu --noconfirm \
         rustup \
@@ -19,8 +18,7 @@ RUN pacman -Syu --noconfirm \
         gcc \
         pkg-config \
         openssl \
-        fuse-overlayfs \
-        podman \
+        crun \
         musl \
     && pacman -Scc --noconfirm \
     && rm -rf /var/cache/pacman/pkg/*

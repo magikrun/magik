@@ -39,9 +39,9 @@ Magik is a decentralized, scale-out workload orchestration fabric that eliminate
 ### 1.2 Design Principles
 
 1. **Statelessness**: Machineplane persists nothing; all state is derived from:
-   - **Runtime state**: Podman provides the source of truth for running workloads
+   - **Runtime state**: Container runtime provides the source of truth for running workloads
    - **Ephemeral tracking**: `tender_tracker` holds transient operation state (not persisted)
-   - **K8s API**: All responses are reconstructed from Podman pod labels
+   - **K8s API**: All responses are reconstructed from container runtime pod labels
 2. **Separation of Concerns**: Machine and workload identities are cryptographically disjoint
 3. **Consumer-Scoped Consistency**: Each workload manages its own consensus (Raft for stateful)
 4. **Ephemeral Scheduling**: Tender→Bid→Award protocol without global state
@@ -123,8 +123,7 @@ magik/
 │   │   ├── network.rs      # Korium mesh networking (DHT, Gossipsub, Request-Response)
 │   │   └── runtimes/       # Runtime engine adapters
 │   │       ├── mod.rs      # RuntimeEngine trait, registry, IsolationMode
-│   │       ├── podman.rs   # PodmanEngine - container isolation via Podman REST API
-│   │       ├── podman_api.rs # Podman REST API client (Unix socket)
+│   │       ├── crun.rs     # CrunEngine - container isolation via crun
 │   │       └── krun.rs     # KrunEngine - microVM isolation via libkrun (optional)
 │   ├── build.rs            # Workplane binary detection and embedding
 │   └── tests/              # Integration tests
@@ -155,7 +154,7 @@ The Machineplane daemon (`machineplane`) runs on each node and provides:
 - **Node Discovery**: Kademlia DHT for peer discovery
 - **Decentralized Scheduling**: Tender→Bid→Award protocol via Gossipsub
 - **Workload Deployment**: Container or microVM lifecycle via runtime engines
-- **Isolation Modes**: MicroVM (default, via libkrun) or Container (via Podman)
+- **Isolation Modes**: MicroVM (default, via libkrun) or Container (via crun)
 - **REST API**: Kubernetes-compatible endpoints
 
 ### 3.2 Startup Sequence
@@ -165,8 +164,8 @@ pub async fn start_machineplane(cli: DaemonConfig) -> Result<Vec<JoinHandle<()>>
     // 1. Initialize logging
     env_logger::Builder::from_env(...).try_init();
 
-    // 2. Configure Podman runtime socket
-    let podman_socket = resolve_and_configure_podman_socket(cli.podman_socket)?;
+    // 2. Configure container runtime
+    let runtime = resolve_and_configure_runtime(cli.runtime_socket)?;
 
     // 3. Set up Korium mesh node (QUIC transport, Kademlia DHT, Gossipsub, Request-Response)
     let (node, peer_rx, peer_tx) = network::setup_korium_node(&bind_addr).await?;
@@ -187,8 +186,8 @@ pub async fn start_machineplane(cli: DaemonConfig) -> Result<Vec<JoinHandle<()>>
     // 7. Spawn Korium event loop
     tokio::spawn(network::start_korium_node(node, peer_tx, control_rx, dht_refresh_interval));
 
-    // 8. Initialize runtime registry (Podman + Krun)
-    scheduler::initialize_podman_manager().await?;
+    // 8. Initialize runtime registry (crun + krun)
+    scheduler::initialize_runtime_manager().await?;
 
     // 9. Start REST API server
     let app = api::build_router(peer_rx, control_tx, public_bytes);
@@ -428,11 +427,11 @@ pub trait RuntimeEngine: Send + Sync {
     async fn logs(&self, pod_id: &str, tail: Option<usize>) -> Result<String>;
 }
 
-/// Podman implementation
-impl RuntimeEngine for PodmanEngine {
+/// Crun implementation
+impl RuntimeEngine for CrunEngine {
     async fn apply(&self, manifest_content: &[u8], config: &DeploymentConfig) -> Result<PodInfo> {
         // 1. Write manifest to temp file
-        // 2. Run: podman play kube <manifest> --replace
+        // 2. Deploy via crun runtime
         // 3. Parse output for container IDs
         // 4. Return PodInfo with status
     }
@@ -446,7 +445,7 @@ limits (63 characters per RFC 1123):
 
 ```rust
 /// Generate a unique pod ID using UUID v4
-/// Returns a UUID v4 string (36 chars). Podman may add `-pod` suffix internally,
+/// Returns a UUID v4 string (36 chars). The runtime may add `-pod` suffix internally,
 /// resulting in max 40 chars total—well under the 63-char DNS hostname limit.
 fn generate_pod_id() -> String {
     Uuid::new_v4().to_string()
@@ -470,7 +469,7 @@ When deploying a manifest, Magik injects the following labels for tracking and K
 
 The K8s API module (`kube.rs`) provides kubectl-compatible endpoints while maintaining Magik's
 stateless architecture. **No K8s resource state is stored in memory**—all responses are derived
-from the Podman runtime.
+from the container runtime.
 
 #### Architecture
 
@@ -491,7 +490,7 @@ from the Podman runtime.
               │                               │
               ▼                               ▼
 ┌─────────────────────────┐     ┌─────────────────────────┐
-│   Podman Runtime        │     │   Gossipsub Tender      │
+│   Container Runtime     │     │   Gossipsub Tender      │
 │   (local pods only)     │     │   (fire-and-forget)     │
 └─────────────────────────┘     └─────────────────────────┘
 ```
@@ -519,7 +518,7 @@ fn aggregate_workloads(pods: &[PodListEntry], namespace: &str, kind: Option<&str
 |------------|--------|
 | Local node only | No mesh-wide aggregation; each node shows only its own pods |
 | No UPDATE/PATCH | Only CREATE and DELETE supported (republish for updates) |
-| Best-effort status | Status reflects Podman state, may have propagation delay |
+| Best-effort status | Status reflects runtime state, may have propagation delay |
 
 ---
 
@@ -557,7 +556,7 @@ cargo build -p machineplane --release
 At runtime, machineplane:
 1. Extracts the embedded binary
 2. Creates a minimal OCI image (`localhost/magik/workplane:latest`)
-3. Imports it into Podman
+3. Imports it into the container runtime
 4. Uses it as the `infra_image` for all pods
 
 ### 4.2 Agent Lifecycle
@@ -917,7 +916,7 @@ Direct communication between specific peers:
 | Step | Message | From | To | Transport | Description |
 |------|---------|------|-----|-----------|-------------|
 | 1 | Disposal | Requester | All nodes | Gossipsub (`magik/fabric`) | Fire-and-forget; namespace/kind/name + timestamp + nonce + signature |
-| 2 | (local) | Each node | Podman | — | Verify signature, add to disposal_map (5m TTL), delete matching pods |
+| 2 | (local) | Each node | Runtime | — | Verify signature, add to disposal_map (5m TTL), delete matching pods |
 
 #### State Transitions
 
@@ -925,7 +924,7 @@ Direct communication between specific peers:
 |---------------|-------|------------|--------|
 | Idle | TenderReceived | Bidding | Compute score, send Bid if eligible |
 | Bidding | NotEligible | Idle | Skip tender |
-| Bidding | AwardReceived | Deploying | Deploy manifest via Podman |
+| Bidding | AwardReceived | Deploying | Deploy manifest via runtime |
 | Deploying | DeployOK | Running | Send `Started` event |
 | Deploying | DeployFail | Idle | Send `Failed` event |
 | Running | DisposalReceived | Idle | Delete pods, add to disposal_map |
@@ -1145,7 +1144,7 @@ All Korium connections use **QUIC with TLS 1.3** for:
 | **Clock skew exploitation** | ±30s tolerance | Future: use vector clocks or HLC |
 | **Tender storm amplification** | Leader-only reconciliation recommended | Rate limiting in self-heal loop |
 | **REST API TLS** | Not built-in | Deploy behind TLS-terminating proxy |
-| **Podman socket injection** | Env var controlled | Validate socket paths against allowed prefixes |
+| **Runtime socket injection** | Env var controlled | Validate socket paths against allowed prefixes |
 
 ---
 
@@ -1432,20 +1431,20 @@ classDiagram
 | `/disposal/{ns}/{kind}/{name}` | GET | Check if resource is marked for disposal |
 | `/disposal/{ns}/{kind}/{name}` | DELETE | Delete workload (broadcasts DISPOSAL) |
 
-The K8s API is **stateless by design**: all read operations derive state from the local Podman runtime,
+The K8s API is **stateless by design**: all read operations derive state from the local container runtime,
 and all write operations publish tenders via Gossipsub (fire-and-forget).
 
 | Endpoint | Method | Description | Source |
 |----------|--------|-------------|--------|
-| `/api/v1/namespaces/{ns}/pods` | GET | List pods | Podman runtime |
-| `/api/v1/namespaces/{ns}/pods/{name}` | GET | Get pod | Podman runtime |
-| `/api/v1/namespaces/{ns}/pods/{name}/log` | GET | Get pod logs | Podman runtime |
-| `/apis/apps/v1/namespaces/{ns}/deployments` | GET | List deployments | Podman pods (aggregated) |
-| `/apis/apps/v1/namespaces/{ns}/deployments/{name}` | GET | Get deployment | Podman pods (aggregated) |
+| `/api/v1/namespaces/{ns}/pods` | GET | List pods | Container runtime |
+| `/api/v1/namespaces/{ns}/pods/{name}` | GET | Get pod | Container runtime |
+| `/api/v1/namespaces/{ns}/pods/{name}/log` | GET | Get pod logs | Container runtime |
+| `/apis/apps/v1/namespaces/{ns}/deployments` | GET | List deployments | Runtime pods (aggregated) |
+| `/apis/apps/v1/namespaces/{ns}/deployments/{name}` | GET | Get deployment | Runtime pods (aggregated) |
 | `/apis/apps/v1/namespaces/{ns}/deployments` | POST | Create deployment | Gossipsub tender |
 | `/apis/apps/v1/namespaces/{ns}/deployments/{name}` | DELETE | Delete deployment | Gossipsub tender |
-| `/apis/apps/v1/namespaces/{ns}/statefulsets` | GET | List statefulsets | Podman pods (aggregated) |
-| `/apis/apps/v1/namespaces/{ns}/statefulsets/{name}` | GET | Get statefulset | Podman pods (aggregated) |
+| `/apis/apps/v1/namespaces/{ns}/statefulsets` | GET | List statefulsets | Runtime pods (aggregated) |
+| `/apis/apps/v1/namespaces/{ns}/statefulsets/{name}` | GET | Get statefulset | Runtime pods (aggregated) |
 | `/apis/apps/v1/namespaces/{ns}/statefulsets` | POST | Create statefulset | Gossipsub tender |
 | `/apis/apps/v1/namespaces/{ns}/statefulsets/{name}` | DELETE | Delete statefulset | Gossipsub tender |
 | `/apis/apps/v1/namespaces/{ns}/replicasets` | GET | List replicasets | Derived from deployments |
@@ -1470,7 +1469,7 @@ requires querying multiple nodes or using DHT-based discovery.
 | `/debug/tenders` | GET | List tracked tenders |
 | `/debug/local_identity` | GET | Get local node identity |
 | `/debug/dht/peers` | GET | List DHT peers |
-| `/debug/pods` | GET | List local pods from Podman (stateless) |
+| `/debug/pods` | GET | List local pods from runtime (stateless) |
 
 ### 8.2 Workplane RPC Methods
 
@@ -1496,9 +1495,9 @@ pub struct Cli {
     #[arg(long, default_value = "3000")]
     pub rest_api_port: u16,
 
-    /// Podman socket path
+    /// Runtime socket path
     #[arg(long, env = "CONTAINER_HOST")]
-    pub podman_socket: Option<String>,
+    pub runtime_socket: Option<String>,
 
     /// Bootstrap peer addresses in format: `<identity_hex>@<ip:port>`
     #[arg(long)]
@@ -1522,11 +1521,11 @@ pub struct Cli {
 }
 ```
 
-**Podman Socket Resolution Order:**
-1. `--podman-socket` CLI argument
+**Runtime Socket Resolution Order:**
+1. `--runtime-socket` CLI argument
 2. `CONTAINER_HOST` environment variable
-3. Auto-detection via `PodmanEngine::detect_podman_socket`
-4. `/run/user/{uid}/podman/podman.sock`
+3. Auto-detection via `RuntimeEngine::detect_socket`
+4. Default system socket path
 
 ### 9.2 Workplane Environment Variables
 
@@ -1637,7 +1636,7 @@ match process_manifest_deployment(...).await {
 | M.5 | Mutex poisoning panic strategy | Multiple locations | Propagate errors or ensure panic causes shutdown |
 | M.6 | DHT record namespace bypass | `discovery.rs:113-145` | Validate `workload_id` matches record fields |
 | M.7 | Selection window timing attack | `scheduler.rs:507-515` | Add ±10% randomized jitter |
-| M.8 | Podman socket path injection | `podman.rs:54-70` | Validate against allowed path prefixes |
+| M.8 | Runtime socket path injection | `crun.rs:54-70` | Validate against allowed path prefixes |
 
 ### A.4 Low Severity Findings
 

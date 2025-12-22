@@ -10,7 +10,6 @@
     "RUST_LOG": "info",
     "RUST_BACKTRACE": "1"
   },
-  "postCreateCommand": "chmod +x .devcontainer/setup-podman-storage.sh && .devcontainer/setup-podman-storage.sh",
   "customizations": {
     "vscode": {
       "extensions": [
