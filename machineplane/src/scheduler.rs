@@ -223,7 +223,7 @@ pub async fn handle_disposal(
 
     mark_disposal(&resource_key).await;
 
-    match crate::runtime::delete_pods_by_resource(
+    match crate::old::runtime::delete_pods_by_resource(
         &disposal.namespace,
         &disposal.kind,
         &disposal.name,

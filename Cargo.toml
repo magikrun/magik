@@ -8,6 +8,7 @@ members = [
 [workspace.dependencies]
 blake3 = "1.5"
 korium = "0.1.0"
+magikpod = "0.2.0"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }

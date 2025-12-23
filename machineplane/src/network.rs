@@ -642,7 +642,7 @@ async fn process_award(
         origin_peer: award.owner_identity.clone(),
     };
 
-    match crate::runtime::process_manifest_deployment(&apply_req, &award.manifest_json).await {
+    match crate::old::runtime::process_manifest_deployment(&apply_req, &award.manifest_json).await {
         Ok(pod_id) => {
             info!(
                 "Successfully deployed manifest for tender {} as pod {}",

@@ -14,9 +14,14 @@
 //! - [`api`]: REST API handlers for Kubernetes-compatible endpoints
 //! - [`network`]: Korium-based mesh networking and message routing
 //! - [`scheduler`]: Tender/bid/award scheduling protocol implementation
-//! - [`runtime`]: Runtime engine abstraction and manifest processing
-//! - [`runtimes`]: MicroVM runtime implementation (KrunEngine)
 //! - [`messages`]: Protocol message types for inter-node communication
+//!
+//! ## Legacy Modules (deprecated)
+//!
+//! The following modules have been moved to `src/old/` and are pending refactoring
+//! to consume `magikpod` instead of custom runtime implementations:
+//! - `old::runtime`: Legacy runtime engine abstraction
+//! - `old::runtimes`: Legacy KrunEngine/CrunEngine implementations
 
 use clap::Parser;
 use env_logger::Env;
@@ -24,8 +29,6 @@ use env_logger::Env;
 pub mod api;
 pub mod messages;
 pub mod network;
-pub mod runtime;
-pub mod runtimes;
 pub mod scheduler;
 
 /// Command-line interface configuration for the machineplane daemon.
@@ -183,7 +186,7 @@ pub async fn start_machineplane(
     });
 
     log::info!("Initializing runtime registry (microVM via libkrun)...");
-    if let Err(e) = runtime::initialize_runtime().await {
+    if let Err(e) = old::runtime::initialize_runtime().await {
         log::error!(
             "Failed to initialize runtime: {}. libkrun is required for Magik.",
             e
