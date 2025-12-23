@@ -18,10 +18,11 @@
 //!
 //! ## Legacy Modules (deprecated)
 //!
-//! The following modules have been moved to `src/old/` and are pending refactoring
-//! to consume `magikpod` instead of custom runtime implementations:
-//! - `old::runtime`: Legacy runtime engine abstraction
-//! - `old::runtimes`: Legacy KrunEngine/CrunEngine implementations
+//! ## Pod Service Integration
+//!
+//! Pod lifecycle is delegated to the `magikpod` crate via [`podservice`]:
+//! - Default runtime: `pod-microvm-containers` (MicroVMs via libkrun)
+//! - Override via `magik.io/runtime-class` annotation
 
 use clap::Parser;
 use env_logger::Env;
@@ -29,6 +30,7 @@ use env_logger::Env;
 pub mod api;
 pub mod messages;
 pub mod network;
+pub mod podservice;
 pub mod scheduler;
 
 /// Command-line interface configuration for the machineplane daemon.
@@ -185,15 +187,15 @@ pub async fn start_machineplane(
         }
     });
 
-    log::info!("Initializing runtime registry (microVM via libkrun)...");
-    if let Err(e) = old::runtime::initialize_runtime().await {
+    log::info!("Initializing pod service (default: microVM via libkrun)...");
+    if let Err(e) = podservice::initialize().await {
         log::error!(
-            "Failed to initialize runtime: {}. libkrun is required for Magik.",
+            "Failed to initialize pod service: {}. libkrun is required for Magik.",
             e
         );
-        return Err(anyhow::anyhow!("libkrun initialization failed: {}", e));
+        return Err(anyhow::anyhow!("pod service initialization failed: {}", e));
     }
-    log::info!("Runtime registry initialized successfully");
+    log::info!("Pod service initialized successfully");
 
     let mut handles = Vec::new();
 

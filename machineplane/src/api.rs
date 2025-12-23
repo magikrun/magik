@@ -263,19 +263,19 @@ pub mod kube {
     }
 
     /// Converts PodStatus to a Kubernetes-compatible phase string.
-    fn pod_status_to_k8s_phase(status: &crate::old::runtimes::PodStatus) -> &'static str {
+    fn pod_status_to_k8s_phase(status: &crate::podservice::PodStatus) -> &'static str {
         match status {
-            crate::old::runtimes::PodStatus::Running => "Running",
-            crate::old::runtimes::PodStatus::Starting => "Pending",
-            crate::old::runtimes::PodStatus::Stopped => "Succeeded",
-            crate::old::runtimes::PodStatus::Failed(_) => "Failed",
-            crate::old::runtimes::PodStatus::Unknown => "Unknown",
+            crate::podservice::PodStatus::Running => "Running",
+            crate::podservice::PodStatus::Starting => "Pending",
+            crate::podservice::PodStatus::Stopped => "Succeeded",
+            crate::podservice::PodStatus::Failed(_) => "Failed",
+            crate::podservice::PodStatus::Unknown => "Unknown",
         }
     }
 
     /// Checks if a PodStatus indicates a running state.
-    fn is_pod_running(status: &crate::old::runtimes::PodStatus) -> bool {
-        matches!(status, crate::old::runtimes::PodStatus::Running)
+    fn is_pod_running(status: &crate::podservice::PodStatus) -> bool {
+        matches!(status, crate::podservice::PodStatus::Running)
     }
 
     /// Formats a SystemTime as an RFC 3339 timestamp string.
@@ -292,7 +292,7 @@ pub mod kube {
             })
     }
 
-    fn extract_workload_info(pod: &crate::old::runtimes::PodInfo) -> Option<WorkloadInfo> {
+    fn extract_workload_info(pod: &crate::podservice::PodInfo) -> Option<WorkloadInfo> {
         let labels = &pod.metadata;
 
         let namespace = labels
@@ -333,7 +333,7 @@ pub mod kube {
     }
 
     fn aggregate_workloads(
-        pods: &[crate::old::runtimes::PodInfo],
+        pods: &[crate::podservice::PodInfo],
         namespace_filter: &str,
         kind_filter: Option<&str>,
     ) -> Vec<WorkloadInfo> {
@@ -412,7 +412,7 @@ pub mod kube {
         Path(namespace): Path<String>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -432,7 +432,7 @@ pub mod kube {
         Path((namespace, name)): Path<(String, String)>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -551,7 +551,7 @@ pub mod kube {
         Path(namespace): Path<String>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -571,7 +571,7 @@ pub mod kube {
         Path((namespace, name)): Path<(String, String)>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -692,7 +692,7 @@ pub mod kube {
         Path(namespace): Path<String>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -712,7 +712,7 @@ pub mod kube {
         Path((namespace, name)): Path<(String, String)>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -729,7 +729,7 @@ pub mod kube {
         Err(StatusCode::NOT_FOUND)
     }
 
-    fn build_pod_response(pod: &crate::old::runtimes::PodInfo) -> Value {
+    fn build_pod_response(pod: &crate::podservice::PodInfo) -> Value {
         let labels = &pod.metadata;
         let name = &pod.name;
         let namespace = labels
@@ -748,8 +748,8 @@ pub mod kube {
                 json!({ "running": { "startedAt": created_timestamp } })
             } else {
                 match &pod.status {
-                    crate::old::runtimes::PodStatus::Failed(reason) => json!({ "terminated": { "exitCode": 1, "reason": reason } }),
-                    crate::old::runtimes::PodStatus::Stopped => json!({ "terminated": { "exitCode": 0, "reason": "Completed" } }),
+                    crate::podservice::PodStatus::Failed(reason) => json!({ "terminated": { "exitCode": 1, "reason": reason } }),
+                    crate::podservice::PodStatus::Stopped => json!({ "terminated": { "exitCode": 0, "reason": "Completed" } }),
                     _ => json!({ "waiting": { "reason": phase } })
                 }
             },
@@ -791,7 +791,7 @@ pub mod kube {
         Path(namespace): Path<String>,
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -820,7 +820,7 @@ pub mod kube {
         State(_state): State<RestState>,
     ) -> Result<Json<Value>, StatusCode> {
         // Try to find the pod by name in the list
-        let pods = crate::old::runtime::list_all_pods().await.map_err(|e| {
+        let pods = crate::podservice::list_all_pods().await.map_err(|e| {
             warn!("Failed to list pods: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -842,11 +842,8 @@ pub mod kube {
             }
         }
 
-        // Try direct lookup by ID
-        match crate::old::runtime::get_pod(&name).await {
-            Ok(pod) => Ok(Json(build_pod_response(&pod))),
-            Err(_) => Err(StatusCode::NOT_FOUND),
-        }
+        // Pod not found in list
+        Err(StatusCode::NOT_FOUND)
     }
 
     async fn get_pod_logs(
@@ -856,12 +853,12 @@ pub mod kube {
     ) -> Result<String, StatusCode> {
         let tail = params.get("tailLines").and_then(|v| v.parse().ok());
 
-        match crate::old::runtime::get_pod_logs(&name, tail).await {
+        match crate::podservice::get_pod_logs(&name, tail).await {
             Ok(logs) => Ok(logs),
             Err(e) => {
                 // Check if it's a not-found error
                 let err_str = e.to_string();
-                if err_str.contains("not found") || err_str.contains("InstanceNotFound") {
+                if err_str.contains("not found") || err_str.contains("NotFound") {
                     Err(StatusCode::NOT_FOUND)
                 } else {
                     warn!("Failed to get logs for pod {}: {}", name, e);
@@ -873,7 +870,7 @@ pub mod kube {
 
     /// Maximum allowed manifest size (1 MiB) to prevent memory exhaustion
     /// from oversized or malicious YAML/JSON payloads.
-    const MAX_MANIFEST_SIZE: usize = 1024 * 1024;
+    pub const MAX_MANIFEST_SIZE: usize = 1024 * 1024;
 
     fn parse_manifest(body: &[u8]) -> Result<Value, StatusCode> {
         if body.is_empty() {
@@ -1091,7 +1088,7 @@ pub fn build_router(
 
     Router::new()
         // Defense in depth: explicit body size limit matching MAX_MANIFEST_SIZE
-        .layer(DefaultBodyLimit::max(crate::old::runtime::MAX_MANIFEST_SIZE))
+        .layer(DefaultBodyLimit::max(kube::MAX_MANIFEST_SIZE))
         .route("/health", get(|| async { "ok" }))
         .route("/api/v1/pubkey", get(get_public_key))
         // NOTE: kem_pubkey currently returns Ed25519 signing key, not a KEM key.
@@ -1449,7 +1446,7 @@ async fn debug_pods(State(state): State<RestState>) -> axum::Json<serde_json::Va
         }
     };
 
-    match crate::old::runtime::list_all_pods().await {
+    match crate::podservice::list_all_pods().await {
         Ok(pods) => {
             let mut instances = serde_json::Map::new();
 
@@ -1457,11 +1454,11 @@ async fn debug_pods(State(state): State<RestState>) -> axum::Json<serde_json::Va
                 let pod_id = &pod.id;
                 let pod_name = &pod.name;
                 let pod_status = match &pod.status {
-                    crate::old::runtimes::PodStatus::Running => "Running",
-                    crate::old::runtimes::PodStatus::Starting => "Starting",
-                    crate::old::runtimes::PodStatus::Stopped => "Stopped",
-                    crate::old::runtimes::PodStatus::Failed(reason) => reason.as_str(),
-                    crate::old::runtimes::PodStatus::Unknown => "Unknown",
+                    crate::podservice::PodStatus::Running => "Running",
+                    crate::podservice::PodStatus::Starting => "Starting",
+                    crate::podservice::PodStatus::Stopped => "Stopped",
+                    crate::podservice::PodStatus::Failed(reason) => reason.as_str(),
+                    crate::podservice::PodStatus::Unknown => "Unknown",
                 };
                 let labels = &pod.metadata;
 

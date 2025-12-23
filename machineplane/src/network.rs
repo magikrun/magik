@@ -635,14 +635,8 @@ async fn process_award(
 
     crate::scheduler::register_local_manifest(&award.tender_id, &award.manifest_json);
 
-    let apply_req = crate::messages::ApplyRequest {
-        replicas: award.replicas.max(1),
-        operation_id: format!("award-{}-{}", award.tender_id, uuid::Uuid::new_v4()),
-        manifest_json: award.manifest_json.clone(),
-        origin_peer: award.owner_identity.clone(),
-    };
-
-    match crate::old::runtime::process_manifest_deployment(&apply_req, &award.manifest_json).await {
+    // Deploy pod via podservice
+    match crate::podservice::deploy_pod(&award.manifest_json).await {
         Ok(pod_id) => {
             info!(
                 "Successfully deployed manifest for tender {} as pod {}",
